@@ -391,9 +391,9 @@ def _rule_parse(message):
 
 def confidence_badge(score):
     t = get_T()
-    if score >= 80: return "🟢", t["verified"],   "#065f46"
-    if score >= 50: return "🟡", t["likely_ok"],  "#92400e"
-    return "🔴", t["unverified"], "#991b1b"
+    if score >= 80: return "🟢", t["verified"],   "#166534"
+    if score >= 50: return "🟡", t["likely_ok"],  "#92400E"
+    return "🔴", t["unverified"], "#991B1B"
 
 
 def record_feedback(contact_id, worked):
@@ -418,73 +418,197 @@ def record_feedback(contact_id, worked):
 # ── CSS (mobile-first) ────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-/* ── Base ── */
-.block-container{padding-top:0.5rem !important; padding-left:1rem !important; padding-right:1rem !important; max-width:900px}
+/* ═══════════════════════════════════════════════════════════════
+   RoadSoS Design System
+   ─────────────────────────────────────────────────────────────
+   COLOR TOKENS  (semantic, single source of truth)
+   RED   = emergency action — call now, critical, SOS
+   GREEN = safe / confirmed / ambulance
+   BLUE  = information, GPS, navigation
+   AMBER = caution, medium urgency, warning
+   ═══════════════════════════════════════════════════════════════ */
+:root {
+  /* Red — emergency */
+  --c-red:        #DC2626;
+  --c-red-dark:   #991B1B;
+  --c-red-deep:   #7F1D1D;
+  --c-red-bg:     #FEF2F2;
+  --c-red-border: #FECACA;
+
+  /* Green — safe / ambulance */
+  --c-green:        #16A34A;
+  --c-green-dark:   #166534;
+  --c-green-deep:   #064E3B;  /* authority tiles */
+  --c-green-bg:     #F0FDF4;
+  --c-green-border: #BBF7D0;
+
+  /* Blue — info / GPS */
+  --c-blue:        #1D4ED8;
+  --c-blue-dark:   #1E3A5F;
+  --c-blue-bg:     #EFF6FF;
+  --c-blue-border: #BFDBFE;
+
+  /* Amber — warning */
+  --c-amber:        #D97706;
+  --c-amber-dark:   #92400E;
+  --c-amber-bg:     #FFFBEB;
+  --c-amber-border: #FDE68A;
+
+  /* Neutral */
+  --c-text:    #111827;
+  --c-text-2:  #4B5563;
+  --c-text-3:  #9CA3AF;
+  --c-surface: #F8FAFC;
+  --c-border:  #E2E8F0;
+  --c-white:   #FFFFFF;
+
+  /* ── TYPE SCALE (emergency-first: larger than typical apps) ──
+     Minimum 13px — a panicking person with cracked screen must read this
+  */
+  --fs-xs:    11px;   /* badges, tiny chips — use sparingly */
+  --fs-sm:    13px;   /* captions, secondary info */
+  --fs-base:  15px;   /* body text */
+  --fs-ui:    16px;   /* labels, secondary buttons */
+  --fs-cta:   18px;   /* primary buttons, action text */
+  --fs-num-s: 22px;   /* distances, secondary numbers */
+  --fs-num-m: 26px;   /* contact phone numbers */
+  --fs-num-l: 36px;   /* tier-1 emergency numbers */
+
+  /* ── WEIGHTS ── */
+  --fw-normal:  400;
+  --fw-medium:  600;
+  --fw-bold:    800;
+}
+
+/* ── Layout ── */
+.block-container {
+  padding-top: 0.5rem !important;
+  padding-left: 1rem !important;
+  padding-right: 1rem !important;
+  max-width: 900px;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  color: var(--c-text);
+}
 
 /* ── Tier 1 emergency numbers ── */
-.tier1{background:#064e3b;color:white;border-radius:10px;padding:12px 8px;margin:4px 0;text-align:center;cursor:pointer}
-.tier1 .num{font-size:34px;font-weight:900;letter-spacing:2px;line-height:1.1}
-.tier1 .lbl{font-size:12px;font-weight:700;opacity:.95;margin-top:5px;line-height:1.2}
-.tier1 .sub{font-size:10px;opacity:.7;margin-top:2px;line-height:1.2}
+.tier1 {
+  background: var(--c-green-deep);
+  color: var(--c-white);
+  border-radius: 10px;
+  padding: 14px 8px;
+  margin: 4px 0;
+  text-align: center;
+  cursor: pointer;
+}
+.tier1 .num {
+  font-size: var(--fs-num-l);
+  font-weight: var(--fw-bold);
+  letter-spacing: 2px;
+  line-height: 1.1;
+}
+.tier1 .lbl {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  opacity: 0.95;
+  margin-top: 6px;
+  line-height: 1.3;
+}
+.tier1 .sub {
+  font-size: var(--fs-xs);
+  opacity: 0.7;
+  margin-top: 3px;
+  line-height: 1.3;
+}
 
 /* ── Contact cards ── */
-.contact-card{background:#f9fafb;border-left:4px solid #ddd;border-radius:6px;padding:10px 14px;margin:6px 0}
-.contact-card.green-border{border-left-color:#059669}
-.contact-card.amber-border{border-left-color:#d97706}
-.contact-card.red-border{border-left-color:#dc2626}
+.contact-card {
+  background: var(--c-surface);
+  border-left: 4px solid var(--c-border);
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin: 6px 0;
+}
+.contact-card.green-border { border-left-color: var(--c-green); }
+.contact-card.amber-border { border-left-color: var(--c-amber); }
+.contact-card.red-border   { border-left-color: var(--c-red); }
 
 /* ── Golden hour banners ── */
-.gh-green{background:#dcfce7;border:1px solid #86efac;border-radius:10px;padding:14px;color:#14532d;margin:8px 0}
-.gh-amber{background:#fef3c7;border:1px solid #fcd34d;border-radius:10px;padding:14px;color:#78350f;margin:8px 0}
-.gh-red  {background:#fee2e2;border:1px solid #fca5a5;border-radius:10px;padding:14px;color:#7f1d1d;margin:8px 0}
-.gh-green strong,.gh-amber strong,.gh-red strong{font-size:16px}
+.gh-green {
+  background: var(--c-green-bg);
+  border: 1px solid var(--c-green-border);
+  border-radius: 10px;
+  padding: 14px;
+  color: var(--c-green-dark);
+  margin: 8px 0;
+}
+.gh-amber {
+  background: var(--c-amber-bg);
+  border: 1px solid var(--c-amber-border);
+  border-radius: 10px;
+  padding: 14px;
+  color: var(--c-amber-dark);
+  margin: 8px 0;
+}
+.gh-red {
+  background: var(--c-red-bg);
+  border: 1px solid var(--c-red-border);
+  border-radius: 10px;
+  padding: 14px;
+  color: var(--c-red-dark);
+  margin: 8px 0;
+}
+.gh-green strong, .gh-amber strong, .gh-red strong {
+  font-size: var(--fs-ui);
+  font-weight: var(--fw-bold);
+}
 
-/* ── Phone number display ── */
-.big-phone{font-size:24px;font-weight:800;color:#1e3a5f;margin:4px 0}
+/* ── Phone number display in contact cards ── */
+.big-phone {
+  font-size: var(--fs-num-m);
+  font-weight: var(--fw-bold);
+  color: var(--c-blue-dark);
+  margin: 4px 0;
+  letter-spacing: 1px;
+}
 
-/* ── Buttons: bigger touch targets ── */
+/* ── Streamlit button overrides ── */
 div.stButton > button {
-    min-height: 48px;
-    font-size: 16px;
-    border-radius: 8px;
+  min-height: 48px;
+  font-size: var(--fs-ui);
+  font-weight: var(--fw-medium);
+  border-radius: 8px;
+  letter-spacing: 0.2px;
 }
 div.stButton > button[kind="primary"] {
-    font-size: 18px;
-    min-height: 56px;
-    font-weight: 700;
+  font-size: var(--fs-cta);
+  min-height: 56px;
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.3px;
 }
 
-/* ── MOBILE RESPONSIVE (screens under 768px) ── */
+/* ── Alert / info banners ── */
+[data-testid="stAlert"] {
+  border-radius: 8px;
+  font-size: var(--fs-base);
+}
+
+/* ── MOBILE (under 768px) ── */
 @media (max-width: 768px) {
-    /* Stack all st.columns vertically */
-    [data-testid="column"] {
-        width: 100% !important;
-        flex: 1 1 100% !important;
-        min-width: 100% !important;
-    }
-    /* Tier 1 numbers: 2x2 grid feel via larger padding */
-    .tier1 .num { font-size: 36px !important; }
-    .tier1 .lbl { font-size: 12px !important; }
-    .tier1 { padding: 16px 8px !important; margin: 3px !important; }
-    /* Phone number very large on mobile */
-    .big-phone { font-size: 30px !important; }
-    /* Reduce outer padding */
-    .block-container { padding-left: 0.5rem !important; padding-right: 0.5rem !important; }
-    /* Bigger buttons on mobile */
-    div.stButton > button { min-height: 54px !important; font-size: 17px !important; width: 100% !important; }
-    /* Golden hour text bigger */
-    .gh-green strong,.gh-amber strong,.gh-red strong { font-size: 17px !important; }
-    /* Hide sidebar toggle label on mobile */
-    section[data-testid="stSidebar"] { min-width: 280px !important; }
-    /* Text inputs larger */
-    textarea, input { font-size: 16px !important; }
+  [data-testid="column"] {
+    width: 100% !important;
+    flex: 1 1 100% !important;
+    min-width: 100% !important;
+  }
+  .tier1 { padding: 16px 8px !important; margin: 3px !important; }
+  .tier1 .num { font-size: 38px !important; }
+  .tier1 .lbl { font-size: 13px !important; }
+  .big-phone  { font-size: 30px !important; }
+  .block-container { padding-left: 0.5rem !important; padding-right: 0.5rem !important; }
+  div.stButton > button { min-height: 54px !important; font-size: 17px !important; width: 100% !important; }
+  .gh-green strong, .gh-amber strong, .gh-red strong { font-size: 17px !important; }
+  section[data-testid="stSidebar"] { min-width: 280px !important; }
+  textarea, input { font-size: 16px !important; }
 }
-
-/* ── Urgency banner ── */
-[data-testid="stAlert"] { border-radius: 8px; font-size: 15px; }
-
-/* ── Divider spacing ── */
-hr { margin: 0.5rem 0 !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -509,35 +633,35 @@ except Exception:
 
 st.html(f"""
 <div style="display:flex;align-items:flex-start;justify-content:space-between;
-     padding:10px 0 4px 0;gap:8px">
+     padding:10px 0 4px 0;gap:8px;font-family:system-ui,sans-serif">
   <div>
-    <div style="font-size:26px;font-weight:900;color:#111;line-height:1.1">
+    <div style="font-size:26px;font-weight:800;color:#111827;line-height:1.1">
       🚨 RoadSoS Buddy
     </div>
-    <div style="font-size:12px;color:#666;margin-top:4px">
+    <div style="font-size:13px;color:#4B5563;margin-top:5px">
       by Safety Champs &nbsp;·&nbsp; {T["tagline"]}
     </div>
   </div>
   <div style="text-align:right;flex-shrink:0">
-    <div style="font-size:22px;font-weight:900;color:#065f46">{_n_contacts if _n_contacts else "–"}</div>
-    <div style="font-size:10px;color:#666;line-height:1.3">verified<br>contacts</div>
-    <div style="font-size:11px;margin-top:4px">{_online_dot} {_online_txt}</div>
+    <div style="font-size:24px;font-weight:800;color:#064E3B;line-height:1">{_n_contacts if _n_contacts else "–"}</div>
+    <div style="font-size:11px;color:#9CA3AF;line-height:1.4;margin-top:2px">verified<br>contacts</div>
+    <div style="font-size:12px;color:#4B5563;margin-top:5px">{_online_dot} {_online_txt}</div>
   </div>
 </div>
 """)
 
 # ── SOS BUTTON ───────────────────────────────────────────────────────────────
 st.html("""
-<div style="display:flex;gap:10px;margin:6px 0 2px 0">
-  <a href="tel:112" style="flex:2;background:#dc2626;color:white;border-radius:12px;
-     font-size:24px;font-weight:900;padding:16px 10px;letter-spacing:2px;
+<div style="display:flex;gap:10px;margin:6px 0 2px 0;font-family:system-ui,sans-serif">
+  <a href="tel:112" style="flex:2;background:#DC2626;color:#FFFFFF;border-radius:12px;
+     font-size:24px;font-weight:800;padding:16px 10px;letter-spacing:2px;
      text-decoration:none;display:block;text-align:center">SOS 112</a>
-  <a href="tel:108" style="flex:1;background:#15803d;color:white;border-radius:12px;
-     font-size:17px;font-weight:800;padding:16px 6px;line-height:1.25;
+  <a href="tel:108" style="flex:1;background:#16A34A;color:#FFFFFF;border-radius:12px;
+     font-size:17px;font-weight:800;padding:16px 6px;line-height:1.3;
      text-decoration:none;display:block;text-align:center">108<br>Ambulance</a>
 </div>
-<div style="font-size:11px;color:#888;text-align:center;margin-top:4px">
-  Tap to call &bull; Works offline &bull; 24×7 anywhere in India
+<div style="font-size:13px;color:#9CA3AF;text-align:center;margin-top:6px;font-family:system-ui,sans-serif">
+  Tap to call immediately &bull; Works offline &bull; 24×7 anywhere in India
 </div>
 """)
 
@@ -613,14 +737,14 @@ auto_lon = float(params["lon"]) if "lon" in params else 0.0
 st.html("""
 <style>
 #gps-btn {
-    background:#1d4ed8;color:white;border:none;
+    background:#1D4ED8;color:#FFFFFF;border:none;
     padding:15px 20px;border-radius:10px;font-size:17px;
-    font-weight:700;width:100%;cursor:pointer;margin-bottom:4px;
-    letter-spacing:0.3px;
+    font-weight:600;width:100%;cursor:pointer;margin-bottom:4px;
+    letter-spacing:0.3px;font-family:system-ui,sans-serif;
 }
-#gps-btn:active{background:#1e40af;}
-#gps-status{font-size:12px;color:#666;text-align:center;min-height:18px;}
-#gps-coords{font-size:13px;color:#1d4ed8;text-align:center;margin-top:4px;font-weight:600;}
+#gps-btn:active{background:#1E40AF;}
+#gps-status{font-size:13px;color:#4B5563;text-align:center;min-height:18px;font-family:system-ui,sans-serif;}
+#gps-coords{font-size:13px;color:#1D4ED8;text-align:center;margin-top:4px;font-weight:600;font-family:system-ui,sans-serif;}
 </style>
 <button id="gps-btn" onclick="getGPS()">📍 Auto-detect My Location</button>
 <div id="gps-status"></div>
@@ -731,8 +855,9 @@ with _search_col:
     )
 with _info_col:
     st.markdown(
-        f'<div style="background:#1d4ed8;color:#fff;border-radius:8px;'
-        f'padding:6px 12px;text-align:center;font-weight:700;font-size:14px">'
+        f'<div style="background:#1D4ED8;color:#FFFFFF;border-radius:8px;'
+        f'padding:6px 12px;text-align:center;font-weight:600;font-size:14px;'
+        f'font-family:system-ui,sans-serif">'
         f'{len(_all_countries)} Countries</div>',
         unsafe_allow_html=True
     )
@@ -751,18 +876,18 @@ if _filtered:
         fire   = c.get("fire") or "—"
         cc     = c["cc"].upper()
         name   = c["name"]
-        notes  = c.get("notes") or ""
         return (
-            f'<div style="border:1px solid #e2e8f0;border-radius:10px;'
-            f'padding:10px 12px;margin:3px 0;background:#f8fafc;min-height:90px">'
-            f'<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">'
-            f'<span style="background:#1e3a5f;color:#fff;font-size:10px;font-weight:800;'
-            f'padding:2px 5px;border-radius:4px;letter-spacing:0.5px">{cc}</span>'
-            f'<span style="font-size:14px;font-weight:700;color:#111">{name}</span>'
+            f'<div style="border:1px solid #E2E8F0;border-radius:10px;'
+            f'padding:10px 12px;margin:3px 0;background:#F8FAFC;min-height:90px;'
+            f'font-family:system-ui,sans-serif">'
+            f'<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">'
+            f'<span style="background:#1E3A5F;color:#FFFFFF;font-size:10px;font-weight:600;'
+            f'padding:2px 6px;border-radius:4px;letter-spacing:0.8px">{cc}</span>'
+            f'<span style="font-size:14px;font-weight:600;color:#111827">{name}</span>'
             f'</div>'
-            f'<div style="font-size:26px;font-weight:900;color:#dc2626;'
-            f'letter-spacing:1px;margin:3px 0;line-height:1.1">{emerg}</div>'
-            f'<div style="font-size:11px;color:#64748b;line-height:1.8">'
+            f'<div style="font-size:26px;font-weight:800;color:#DC2626;'
+            f'letter-spacing:1px;margin:4px 0;line-height:1.1">{emerg}</div>'
+            f'<div style="font-size:12px;color:#4B5563;line-height:1.8">'
             f'🚔&nbsp;{police}&nbsp;&nbsp;🚑&nbsp;{amb}&nbsp;&nbsp;🚒&nbsp;{fire}</div>'
             f'</div>'
         )
@@ -892,26 +1017,27 @@ if go and (user_msg or (gps_lat != 0.0 and gps_lon != 0.0)):
             if blood_banks_found:
                 bb = blood_banks_found[0]
                 st.markdown(
-                    f'<div style="background:#fef2f2;border:2px solid #dc2626;border-radius:10px;'
-                    f'padding:12px 16px;margin:8px 0">'
-                    f'<div style="font-size:15px;font-weight:800;color:#991b1b">'
+                    f'<div style="background:#FEF2F2;border:2px solid #DC2626;border-radius:10px;'
+                    f'padding:12px 16px;margin:8px 0;font-family:system-ui,sans-serif">'
+                    f'<div style="font-size:15px;font-weight:600;color:#991B1B">'
                     f'🩸 Nearest Blood Bank: {bb["name"]}</div>'
-                    f'<div style="font-size:22px;font-weight:900;color:#dc2626;margin:4px 0">'
+                    f'<div style="font-size:26px;font-weight:800;color:#DC2626;margin:6px 0;letter-spacing:1px">'
                     f'{bb.get("phone","Call 112")}</div>'
-                    f'<div style="font-size:12px;color:#7f1d1d">'
-                    f'{bb.get("distance_km","?")} km away &nbsp;|&nbsp; '
+                    f'<div style="font-size:13px;color:#4B5563">'
+                    f'{bb.get("distance_km","?")} km away &nbsp;·&nbsp; '
                     f'{bb.get("address","")}</div>'
-                    f'<div style="font-size:11px;color:#991b1b;margin-top:4px">'
+                    f'<div style="font-size:13px;color:#991B1B;margin-top:6px">'
                     f'Call ahead to pre-order blood — tell them accident type and likely blood volume needed</div>'
                     f'</div>',
                     unsafe_allow_html=True
                 )
             else:
                 st.markdown(
-                    '<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;'
-                    'padding:10px 14px;margin:8px 0;font-size:13px;color:#7f1d1d">'
+                    '<div style="background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;'
+                    'padding:10px 14px;margin:8px 0;font-size:13px;color:#991B1B;'
+                    'font-family:system-ui,sans-serif">'
                     '🩸 <b>Blood bank needed:</b> Call the nearest trauma centre directly '
-                    '— all listed trauma centres have 24x7 blood banks on-site.</div>',
+                    '— all listed trauma centres have 24×7 blood banks on-site.</div>',
                     unsafe_allow_html=True
                 )
 
@@ -987,15 +1113,15 @@ if go and (user_msg or (gps_lat != 0.0 and gps_lon != 0.0)):
     wa_url  = f"https://wa.me/?text={urllib.parse.quote(share_msg)}"
     sms_url = f"sms:?body={urllib.parse.quote(share_msg)}"
     st.html(f"""
-    <div style="display:flex;gap:12px;margin:6px 0">
-      <a href="{wa_url}" style="flex:1;background:#16a34a;color:white;border-radius:10px;
-         font-size:16px;font-weight:700;padding:14px 10px;text-decoration:none;
+    <div style="display:flex;gap:12px;margin:6px 0;font-family:system-ui,sans-serif">
+      <a href="{wa_url}" style="flex:1;background:#16A34A;color:#FFFFFF;border-radius:10px;
+         font-size:16px;font-weight:600;padding:14px 10px;text-decoration:none;
          display:block;text-align:center">📲 WhatsApp</a>
-      <a href="{sms_url}" style="flex:1;background:#1d4ed8;color:white;border-radius:10px;
-         font-size:16px;font-weight:700;padding:14px 10px;text-decoration:none;
+      <a href="{sms_url}" style="flex:1;background:#1D4ED8;color:#FFFFFF;border-radius:10px;
+         font-size:16px;font-weight:600;padding:14px 10px;text-decoration:none;
          display:block;text-align:center">💬 SMS</a>
     </div>
-    <div style="font-size:11px;color:#888;text-align:center;margin-top:4px">{T["share_caption"]}</div>
+    <div style="font-size:13px;color:#9CA3AF;text-align:center;margin-top:4px;font-family:system-ui,sans-serif">{T["share_caption"]}</div>
     """)
 
 elif go:
