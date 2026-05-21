@@ -16,6 +16,7 @@ import requests as http
 
 # ── Language / i18n ───────────────────────────────────────────────────────────
 from ui.strings import STRINGS, LANG_OPTIONS, detect_lang_from_script, CRITICAL_KEYWORDS, HIGH_KEYWORDS
+from ui.first_aid import render_first_aid
 from location.blackspots import check_blackspot_proximity
 try:
     from database.verify_numbers import get_badge_html, verify_number
@@ -916,7 +917,11 @@ if go and (user_msg or (gps_lat != 0.0 and gps_lon != 0.0)):
         else:
             st.info(T["no_contacts"])
 
-    # 7. Share
+    # 7. First Aid / Golden Hour Guidance
+    st.divider()
+    render_first_aid(user_msg=user_msg, intent=intent)
+
+    # 8. Share
     st.divider()
     st.subheader("Share: " + T["share_header"])
     contacts_for_share = (db_contacts + osm_contacts)[:3]
