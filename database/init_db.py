@@ -556,12 +556,107 @@ def seed_trauma_centres(conn):
     print("[DB] Seeded " + str(len(trauma)) + " MoRTH trauma centres.")
 
 
+def seed_blood_banks(conn):
+    """
+    12 government blood banks co-located with major trauma centres on NHs.
+    Available 24x7 for road accident victims needing emergency transfusion.
+
+    Sources: National Blood Transfusion Council (NBTC), NHP blood bank registry,
+    AIIMS and state medical college verified contact lists.
+    Schema: (name, category, tier, phone, phone_alt,
+              address, lat, lon, state, district, source, confidence)
+    """
+    blood_banks = [
+        # ── NH-44 / NH-48 Delhi junction ──────────────────────────────────────
+        ("AIIMS Blood Bank New Delhi",
+         "blood_bank", 1, "011-26593308", "011-26589900",
+         "AIIMS Campus, Ansari Nagar, New Delhi - NH-44/48",
+         28.5671, 77.2100, "Delhi", "New Delhi", "nbtc", 97),
+
+        ("Safdarjung Hospital Blood Bank Delhi",
+         "blood_bank", 2, "011-24673488", "011-24675555",
+         "Ansari Nagar West, New Delhi - NH-44",
+         28.5685, 77.2060, "Delhi", "New Delhi", "nbtc", 93),
+
+        # ── NH-44 north — Chandigarh ──────────────────────────────────────────
+        ("PGIMER Blood Bank Chandigarh",
+         "blood_bank", 1, "0172-2756767", "0172-2755555",
+         "Sector 12, Chandigarh - NH-44 km 250",
+         30.7650, 76.7780, "Punjab", "Chandigarh", "nbtc", 96),
+
+        # ── NH-48 — Jaipur ────────────────────────────────────────────────────
+        ("SMS Hospital Blood Bank Jaipur",
+         "blood_bank", 2, "0141-2518055", "0141-2560291",
+         "Tonk Road, Jaipur - NH-48 km 267",
+         26.8927, 75.8036, "Rajasthan", "Jaipur", "nbtc", 91),
+
+        # ── NH-44 — Lucknow ───────────────────────────────────────────────────
+        ("KGMC Blood Bank Lucknow",
+         "blood_bank", 2, "0522-2257450", "0522-2257540",
+         "Shah Mina Road, Lucknow - NH-44 km 490",
+         26.8578, 80.9166, "Uttar Pradesh", "Lucknow", "nbtc", 91),
+
+        # ── NH-44 midpoint — Nagpur ───────────────────────────────────────────
+        ("Government Medical College Blood Bank Nagpur",
+         "blood_bank", 2, "0712-2700088", "0712-2533466",
+         "Medical Square, Nagpur - NH-44 km 1063",
+         21.1370, 79.0888, "Maharashtra", "Nagpur", "nbtc", 89),
+
+        # ── NH-44 — Hyderabad ────────────────────────────────────────────────
+        ("Osmania Hospital Blood Bank Hyderabad",
+         "blood_bank", 2, "040-24600132", "040-23324666",
+         "Afzalgunj, Hyderabad - NH-44 km 1511",
+         17.3778, 78.4733, "Telangana", "Hyderabad", "nbtc", 90),
+
+        # ── NH-44/48 south — Chennai / Bengaluru ──────────────────────────────
+        ("Govt. Stanley Hospital Blood Bank Chennai",
+         "blood_bank", 2, "044-25281201", "044-25281200",
+         "Old Jail Road, Chennai - NH-44 terminus",
+         13.1102, 80.2887, "Tamil Nadu", "Chennai", "nbtc", 90),
+
+        ("Victoria Hospital Blood Bank Bengaluru",
+         "blood_bank", 2, "080-26701159", "080-26701150",
+         "Fort Road, Bengaluru - NH-44/48 junction",
+         12.9636, 77.5854, "Karnataka", "Bengaluru", "nbtc", 91),
+
+        # ── NH-66 — Mumbai ────────────────────────────────────────────────────
+        ("KEM Hospital Blood Bank Mumbai",
+         "blood_bank", 2, "022-24138053", "022-24107000",
+         "Parel, Mumbai - NH-66 start",
+         19.0035, 72.8407, "Maharashtra", "Mumbai", "nbtc", 92),
+
+        # ── NH-16 — Kolkata / Bhubaneswar ─────────────────────────────────────
+        ("SSKM Blood Bank Kolkata",
+         "blood_bank", 2, "033-22041056", "033-22043143",
+         "AJC Bose Road, Kolkata - NH-16/19",
+         22.5420, 88.3503, "West Bengal", "Kolkata", "nbtc", 91),
+
+        ("AIIMS Bhubaneswar Blood Bank - NH-16",
+         "blood_bank", 2, "0674-2476780", "0674-2476700",
+         "Sijua, Bhubaneswar - NH-16 km 512",
+         20.1534, 85.6745, "Odisha", "Bhubaneswar", "nbtc", 91),
+    ]
+
+    cur = conn.cursor()
+    for (name, cat, tier, phone, phone_alt, addr, lat, lon, state, dist, source, conf) in blood_banks:
+        cur.execute("""
+            INSERT OR IGNORE INTO contacts
+            (name, category, tier, phone, phone_alt, address, lat, lon,
+             state, district, country_code, source, confidence, is_active)
+            VALUES (?,?,?,?,?,?,?,?,?,?,'IN',?,?,1)
+        """, (name, cat, tier, phone, phone_alt, addr, lat, lon, state, dist, source, conf))
+
+    conn.commit()
+    print("[DB] Seeded " + str(len(blood_banks)) + " blood banks.")
+
+
 if __name__ == "__main__":
     conn = init_db()
     seed_national_numbers(conn)
     seed_tier2_contacts(conn)
     seed_roadside_services(conn)
     seed_trauma_centres(conn)
+    seed_blood_banks(conn)
     conn.close()
     # Run phonenumbers verification on all seeded contacts
     try:

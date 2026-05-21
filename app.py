@@ -69,12 +69,14 @@ def _auto_init_db():
                 seed_tier2_contacts,
                 seed_roadside_services,
                 seed_trauma_centres,
+                seed_blood_banks,
             )
             _conn = _init_db()
             seed_national_numbers(_conn)
             seed_tier2_contacts(_conn)
             seed_roadside_services(_conn)
             seed_trauma_centres(_conn)
+            seed_blood_banks(_conn)
             _conn.close()
         except Exception:
             pass  # App still works without DB (Tier 1 numbers always shown)
@@ -148,7 +150,7 @@ CATEGORY_ICONS = {
     "towing": "🚛",   "puncture": "🔧", "pharmacy": "💊",
     "fire": "🚒",     "highway_helpline": "🛣️", "emergency": "🆘",
     "disaster": "⛑️", "helpline": "📞", "other": "📍",
-    "trauma": "🏨",   "fuel": "⛽",
+    "trauma": "🏨",   "fuel": "⛽",   "blood_bank": "🩸",
 }
 
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
@@ -841,12 +843,19 @@ if go and (user_msg or (gps_lat != 0.0 and gps_lon != 0.0)):
                 f"**Safety tip:** {s['tip']}"
             )
 
-    # 3. Nearby contacts
+    # 3. Nearby contacts — include blood_bank + trauma for critical injuries
     db_contacts, osm_contacts = [], []
+    _is_critical = intent.get("urgency") in ("critical", "high")
+    _osm_cats = list(intent.get("services", []))
+    if _is_critical and "trauma" not in _osm_cats:
+        _osm_cats.append("trauma")
+    if _is_critical and "blood_bank" not in _osm_cats:
+        _osm_cats.append("blood_bank")
+
     if lat and lon:
         with st.spinner(T["spinner_search"]):
             db_contacts  = fetch_db_contacts(lat, lon, radius_km)
-            osm_contacts = fetch_osm_contacts(lat, lon, int(radius_km*1000), intent.get("services"))
+            osm_contacts = fetch_osm_contacts(lat, lon, int(radius_km*1000), _osm_cats or intent.get("services"))
 
         all_contacts = merge_contacts(db_contacts, osm_contacts)
 
@@ -861,6 +870,35 @@ if go and (user_msg or (gps_lat != 0.0 and gps_lon != 0.0)):
               <span style="font-size:13px">{gh['advice']}</span>
             </div>""", unsafe_allow_html=True)
             st.markdown("")
+
+        # 4b. Blood bank alert — shown prominently for critical cases
+        if _is_critical:
+            blood_banks_found = [c for c in all_contacts if c.get("category") == "blood_bank"]
+            if blood_banks_found:
+                bb = blood_banks_found[0]
+                st.markdown(
+                    f'<div style="background:#fef2f2;border:2px solid #dc2626;border-radius:10px;'
+                    f'padding:12px 16px;margin:8px 0">'
+                    f'<div style="font-size:15px;font-weight:800;color:#991b1b">'
+                    f'🩸 Nearest Blood Bank: {bb["name"]}</div>'
+                    f'<div style="font-size:22px;font-weight:900;color:#dc2626;margin:4px 0">'
+                    f'{bb.get("phone","Call 112")}</div>'
+                    f'<div style="font-size:12px;color:#7f1d1d">'
+                    f'{bb.get("distance_km","?")} km away &nbsp;|&nbsp; '
+                    f'{bb.get("address","")}</div>'
+                    f'<div style="font-size:11px;color:#991b1b;margin-top:4px">'
+                    f'Call ahead to pre-order blood — tell them accident type and likely blood volume needed</div>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+            else:
+                st.markdown(
+                    '<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;'
+                    'padding:10px 14px;margin:8px 0;font-size:13px;color:#7f1d1d">'
+                    '🩸 <b>Blood bank needed:</b> Call the nearest trauma centre directly '
+                    '— all listed trauma centres have 24x7 blood banks on-site.</div>',
+                    unsafe_allow_html=True
+                )
 
         # 5. Triage call order
         if intent["urgency"] in ("critical","high"):

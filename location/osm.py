@@ -20,7 +20,8 @@ CATEGORY_TAGS = {
     "towing":     [("shop", "car_repair"), ("amenity", "car_repair")],
     "puncture":   [("shop", "bicycle"), ("shop", "tyres"), ("shop", "car_repair")],
     "fuel":       [("amenity", "fuel")],
-    "trauma":     [("trauma", "yes"), ("emergency", "yes"), ("healthcare:speciality", "trauma_surgery")],
+    "trauma":      [("trauma", "yes"), ("emergency", "yes"), ("healthcare:speciality", "trauma_surgery")],
+    "blood_bank":  [("amenity", "blood_bank"), ("healthcare", "blood_bank"), ("blood_bank", "yes")],
 }
 
 
@@ -33,6 +34,9 @@ def build_overpass_query(lat: float, lon: float, radius_m: int, categories: list
         parts.append(f'way["amenity"="hospital"]["name"~"[Tt]rauma",i](around:{radius_m},{lat},{lon});')
         parts.append(f'node["amenity"="hospital"]["emergency"="yes"](around:{radius_m},{lat},{lon});')
         parts.append(f'way["amenity"="hospital"]["emergency"="yes"](around:{radius_m},{lat},{lon});')
+    if "blood_bank" in categories:
+        parts.append(f'node["name"~"[Bb]lood",i](around:{radius_m},{lat},{lon});')
+        parts.append(f'way["name"~"[Bb]lood",i](around:{radius_m},{lat},{lon});')
     for cat in categories:
         for tag_key, tag_val in CATEGORY_TAGS.get(cat, []):
             parts.append(f'node["{tag_key}"="{tag_val}"](around:{radius_m},{lat},{lon});')
@@ -128,6 +132,8 @@ def _infer_category(tags: dict) -> str:
     name_lower = tags.get("name","").lower()
     if "trauma" in name_lower: return "trauma"
     if amenity == "hospital" and emergency == "yes": return "trauma"
+    if amenity == "blood_bank" or healthcare == "blood_bank" or tags.get("blood_bank") == "yes": return "blood_bank"
+    if "blood bank" in name_lower or "blood centre" in name_lower or "blood center" in name_lower: return "blood_bank"
     if amenity == "hospital" or healthcare == "hospital": return "hospital"
     if amenity == "clinic":  return "hospital"
     if "ambulance" in amenity or "ambulance" in emergency: return "ambulance"
