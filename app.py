@@ -407,7 +407,12 @@ hr { margin: 0.5rem 0 !important; }
 # ── Header ────────────────────────────────────────────────────────────────────
 col_h1, col_h2 = st.columns([3,1])
 with col_h1:
-    st.markdown("# 🚨 RoadSoS Buddy")
+    st.markdown(
+        '<div style="padding-top:8px">'
+        '<span style="font-size:2rem;font-weight:800;line-height:1.2">&#x1F6A8; RoadSoS Buddy</span>'
+        '</div>',
+        unsafe_allow_html=True
+    )
     st.caption("by Safety Champs  |  " + T["tagline"])
 with col_h2:
     if os.path.exists(DB_PATH):
