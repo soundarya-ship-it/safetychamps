@@ -1462,9 +1462,9 @@ def render_first_aid(user_msg="", intent=None, lang="en"):
         unsafe_allow_html=True,
     )
 
-    # ── SVG illustration ──────────────────────────────────────────────────────
+    # ── SVG illustration — must use st.html() not st.markdown (SVG gets sanitized) ──
     if illus:
-        st.markdown(illus, unsafe_allow_html=True)
+        st.html(illus)
 
     # ── Scenario-specific steps ───────────────────────────────────────────────
     if scenario != "general":
@@ -1495,7 +1495,7 @@ def render_first_aid(user_msg="", intent=None, lang="en"):
                      expanded=(scenario == "general")):
         # Show recovery SVG here if scenario-specific illustration was CPR/bleeding/fracture
         if scenario != "general" and ILLUSTRATIONS.get("general"):
-            st.markdown(SVG_RECOVERY, unsafe_allow_html=True)
+            st.html(SVG_RECOVERY)
         for num, title, detail in gen["dos"]:
             st.markdown(
                 f'<div style="border-left:4px solid #dc2626;'
