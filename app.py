@@ -16,6 +16,7 @@ import requests as http
 
 # ── Language / i18n ───────────────────────────────────────────────────────────
 from ui.strings import STRINGS, LANG_OPTIONS, detect_lang_from_script, CRITICAL_KEYWORDS, HIGH_KEYWORDS
+from location.blackspots import check_blackspot_proximity
 
 if "ui_lang" not in st.session_state:
     st.session_state.ui_lang = "en"
@@ -578,6 +579,15 @@ function getGPS() {
 
 if auto_lat != 0.0 and auto_lon != 0.0:
     st.success(f"GPS location captured: {auto_lat:.4f}, {auto_lon:.4f}")
+    # Proactive black spot check on GPS capture
+    _gps_spots = check_blackspot_proximity(auto_lat, auto_lon, radius_km=10)
+    if _gps_spots:
+        s = _gps_spots[0]
+        st.warning(
+            f"**Accident Black Spot Nearby ({s['distance_km']} km):** {s['name']}\n\n"
+            f"**Risk:** {s['risk_reason']}\n\n"
+            f"**Safety tip:** {s['tip']}"
+        )
 
 # ── Text input + manual GPS ───────────────────────────────────────────────────
 user_msg = st.text_area(
@@ -666,6 +676,17 @@ if go and (user_msg or (gps_lat != 0.0 and gps_lon != 0.0)):
             else:
                 st.warning(f"{T['no_location']}")
 
+    # 2b. Black Spot Warning — check after geocoding (for typed locations)
+    if lat and lon and geo_source != "GPS":  # GPS already checked above
+        _spots = check_blackspot_proximity(lat, lon, radius_km=10)
+        if _spots:
+            s = _spots[0]
+            st.warning(
+                f"**Accident Black Spot Nearby ({s['distance_km']} km):** {s['name']}\n\n"
+                f"**Risk:** {s['risk_reason']}\n\n"
+                f"**Safety tip:** {s['tip']}"
+            )
+
     # 3. Nearby contacts
     db_contacts, osm_contacts = [], []
     if lat and lon:
@@ -716,6 +737,64 @@ if go and (user_msg or (gps_lat != 0.0 and gps_lon != 0.0)):
                     col_a, col_b, col_c = st.columns([2,2,1])
                     with col_a:
                         if phone and phone != "--":
+                            st.markdown(f'<p class="big-phone">{phone}</p>', unsafe_allow_html=True)
+                            if c.get("phone_alt"):
+                                st.markdown(f"Alt: **{c['phone_alt']}**")
+                        else:
+                            st.warning(T["no_phone"])
+                        if c.get("address"):
+                            st.caption(f"Addr: {c['address']}")
+                    with col_b:
+                        st.progress(conf/100, text=f"{T['confidence_label']}: {conf}%")
+                        st.caption(f"{T['source_label']}: {c.get('source','unknown')} | Tier {c.get('tier',3)}")
+                        if conf < 50:
+                            st.warning(T["low_conf_warning"])
+                    with col_c:
+                        cid = c.get("id", 0)
+                        if cid and st.button("OK " + T["btn_worked"], key=f"ok_{cid}_{c['name'][:8]}"):
+                            record_feedback(cid, True)
+                            st.success(T["feedback_ok"])
+                        if cid and st.button("X " + T["btn_failed"], key=f"no_{cid}_{c['name'][:8]}"):
+                            record_feedback(cid, False)
+                            st.error(T["feedback_fail"])
+        else:
+            st.info(T["no_contacts"])
+
+    # 7. Share
+    st.divider()
+    st.subheader("Share: " + T["share_header"])
+    contacts_for_share = (db_contacts + osm_contacts)[:3]
+    nearby_text = ""
+    if contacts_for_share:
+        c0 = contacts_for_share[0]
+        nearby_text = f"\nNearest: {c0['name']} ({c0.get('distance_km','?')} km) - {c0.get('phone') or '108'}"
+    share_msg = (
+        f"ROAD EMERGENCY at {location_display or 'my location'}\n"
+        f"Urgency: {intent['urgency'].upper()}\n"
+        f"CALL 112 immediately{nearby_text}\n"
+        f"Sent via RoadSoS"
+    )
+    wa_url  = f"https://wa.me/?text={urllib.parse.quote(share_msg)}"
+    sms_url = f"sms:?body={urllib.parse.quote(share_msg)}"
+    col_wa, col_sms, _ = st.columns([1,1,2])
+    with col_wa:
+        st.markdown(f"[WhatsApp]({wa_url})", unsafe_allow_html=True)
+    with col_sms:
+        st.markdown(f"[SMS]({sms_url})", unsafe_allow_html=True)
+    st.caption(T["share_caption"])
+
+elif go:
+    st.warning(T["no_input"])
+
+# Footer
+st.divider()
+col_f1, col_f2, col_f3 = st.columns(3)
+with col_f1:
+    st.caption(T["footer1"])
+with col_f2:
+    st.caption(T["footer2"])
+with col_f3:
+    st.caption(T["footer3"])
                             st.markdown(f'<p class="big-phone">{phone}</p>', unsafe_allow_html=True)
                             if c.get("phone_alt"):
                                 st.markdown(f"Alt: **{c['phone_alt']}**")
