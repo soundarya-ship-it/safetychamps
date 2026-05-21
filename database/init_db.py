@@ -362,5 +362,11 @@ if __name__ == "__main__":
     seed_national_numbers(conn)
     seed_tier2_contacts(conn)
     conn.close()
+    # Run phonenumbers verification on all seeded contacts
+    try:
+        from verify_numbers import verify_all_contacts
+        verify_all_contacts(DB_PATH)
+    except Exception as e:
+        print("[verify] Skipped: " + str(e))
     print("\n[DB] Database ready: " + DB_PATH)
     print("[DB] Run: streamlit run app.py")

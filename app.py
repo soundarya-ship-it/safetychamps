@@ -17,6 +17,13 @@ import requests as http
 # ── Language / i18n ───────────────────────────────────────────────────────────
 from ui.strings import STRINGS, LANG_OPTIONS, detect_lang_from_script, CRITICAL_KEYWORDS, HIGH_KEYWORDS
 from location.blackspots import check_blackspot_proximity
+try:
+    from database.verify_numbers import get_badge_html, verify_number
+    VERIFY_AVAILABLE = True
+except Exception:
+    VERIFY_AVAILABLE = False
+    def get_badge_html(phone, country_code="IN"):
+        return ""
 
 if "ui_lang" not in st.session_state:
     st.session_state.ui_lang = "en"
@@ -58,6 +65,12 @@ def _auto_init_db():
             init_script = os.path.join(os.path.dirname(__file__), "database", "init_db.py")
             if os.path.exists(init_script):
                 exec(open(init_script).read(), {"__file__": init_script})
+            # Run number verification after seeding
+            try:
+                from database.verify_numbers import verify_all_contacts
+                verify_all_contacts(DB_PATH)
+            except Exception:
+                pass
         except Exception as e:
             pass  # App still works without DB (Tier 1 numbers always shown)
 
@@ -740,6 +753,9 @@ if go and (user_msg or (gps_lat != 0.0 and gps_lon != 0.0)):
                     with col_a:
                         if phone and phone != "--":
                             st.markdown(f'<p class="big-phone">{phone}</p>', unsafe_allow_html=True)
+                            badge_html = get_badge_html(phone, c.get("country_code", "IN"))
+                            if badge_html:
+                                st.markdown(badge_html, unsafe_allow_html=True)
                             if c.get("phone_alt"):
                                 st.markdown(f"Alt: **{c['phone_alt']}**")
                         else:
