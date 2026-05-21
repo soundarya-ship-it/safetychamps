@@ -9,6 +9,7 @@ Free API key: https://console.groq.com (Groq — Llama 3.1, free tier)
 """
 
 import os, sys, sqlite3, math, re, json, urllib.parse
+from datetime import datetime
 sys.path.insert(0, os.path.dirname(__file__))
 
 import streamlit as st
@@ -848,6 +849,106 @@ if auto_lat != 0.0 and auto_lon != 0.0:
             f"**Safety tip:** {s['tip']}"
         )
 
+# ── WhatsApp Emergency Card — always visible ──────────────────────────────────
+def _build_wa_url(lat=0.0, lon=0.0, situation="", urgency="", nearest_name="", nearest_phone=""):
+    """Build a WhatsApp share URL with a rich pre-filled emergency card."""
+    now = datetime.now()
+    time_str = now.strftime("%d %b %Y, %I:%M %p")
+
+    if lat and lon and lat != 0.0 and lon != 0.0:
+        loc_line   = f"📍 GPS: {lat:.5f}, {lon:.5f}"
+        maps_line  = f"🗺️ https://maps.google.com/?q={lat},{lon}"
+    else:
+        loc_line   = "📍 Location: (GPS not yet detected — tap GPS button)"
+        maps_line  = ""
+
+    situation_line = f"🚗 Situation: {situation}\n" if situation else ""
+    urgency_line   = f"⚠️ Urgency: {urgency.upper()}\n" if urgency else ""
+    nearest_line   = (f"🏥 Nearest help: {nearest_name} — {nearest_phone}\n"
+                      if nearest_name and nearest_phone else "")
+
+    msg = (
+        f"🚨 ROAD ACCIDENT — URGENT HELP NEEDED 🚨\n\n"
+        f"{loc_line}\n"
+        f"{maps_line}\n\n"
+        f"⏰ Time: {time_str}\n\n"
+        f"{situation_line}"
+        f"{urgency_line}"
+        f"{nearest_line}\n"
+        f"📞 Call 112 — Emergency (Police · Ambulance · Fire)\n"
+        f"📞 Call 108 — Ambulance (NHM, 29 states)\n"
+        f"📞 Call 1033 — NHAI Highway Helpline\n\n"
+        f"🩺 DO NOT move injured — wait for ambulance\n"
+        f"❤️ Sent via RoadSoS Buddy | safetychamps.streamlit.app"
+    )
+    return f"https://wa.me/?text={urllib.parse.quote(msg.strip())}"
+
+
+# Build URL using whatever we know right now (GPS + any prior search)
+_prior_intent  = st.session_state.get("last_intent", {}) or {}
+_wa_url_now = _build_wa_url(
+    lat          = auto_lat,
+    lon          = auto_lon,
+    situation    = "",          # no search yet at this point
+    urgency      = "",
+    nearest_name = "",
+    nearest_phone= "",
+)
+
+st.html(f"""
+<div style="margin:10px 0 6px 0;font-family:system-ui,sans-serif">
+
+  <!-- Card container -->
+  <div style="background:linear-gradient(135deg,#16A34A 0%,#15803D 100%);
+              border-radius:14px;padding:14px 16px;position:relative;overflow:hidden">
+
+    <!-- Decorative circles -->
+    <div style="position:absolute;right:-20px;top:-20px;width:80px;height:80px;
+                background:rgba(255,255,255,0.08);border-radius:50%"></div>
+    <div style="position:absolute;right:20px;bottom:-25px;width:60px;height:60px;
+                background:rgba(255,255,255,0.06);border-radius:50%"></div>
+
+    <!-- Header row -->
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+      <span style="font-size:22px">📲</span>
+      <div>
+        <div style="font-size:16px;font-weight:800;color:#FFFFFF;line-height:1.1">
+          Share Emergency on WhatsApp
+        </div>
+        <div style="font-size:11px;color:rgba(255,255,255,0.8);margin-top:1px">
+          {"📍 GPS ready · " if auto_lat else ""}Pre-fills location · numbers · time
+        </div>
+      </div>
+    </div>
+
+    <!-- Preview card -->
+    <div style="background:rgba(255,255,255,0.12);border-radius:10px;
+                padding:10px 12px;margin-bottom:10px;font-size:12px;
+                color:rgba(255,255,255,0.95);line-height:1.7;font-family:monospace">
+      🚨 ROAD ACCIDENT — URGENT HELP<br>
+      {"📍 GPS: " + str(round(auto_lat,4)) + ", " + str(round(auto_lon,4)) if auto_lat else "📍 Location: [tap GPS to add]"}<br>
+      {"🗺️ maps.google.com/?q=" + str(auto_lat) + "," + str(auto_lon) + "<br>" if auto_lat else ""}
+      📞 112 · 108 · 1033<br>
+      ⏰ {datetime.now().strftime("%d %b %Y, %I:%M %p")}
+    </div>
+
+    <!-- Big WhatsApp button -->
+    <a href="{_wa_url_now}"
+       target="_blank"
+       style="display:block;background:#FFFFFF;color:#16A34A;border-radius:10px;
+              font-size:17px;font-weight:800;padding:13px;text-align:center;
+              text-decoration:none;letter-spacing:0.3px">
+      📤 Send on WhatsApp
+    </a>
+
+    <div style="font-size:11px;color:rgba(255,255,255,0.7);text-align:center;margin-top:8px">
+      You choose who to send to · Works on mobile & desktop
+    </div>
+  </div>
+
+</div>
+""")
+
 # ── Text input + manual GPS ───────────────────────────────────────────────────
 user_msg = st.text_area(
     T["input_label"],
@@ -1137,33 +1238,88 @@ if go and (user_msg or (gps_lat != 0.0 and gps_lon != 0.0)):
         else:
             st.info(T["no_contacts"])
 
-    # 7. Share
+    # 7. Share — rich card with full situation context
     st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
     st.subheader("📤 " + T["share_header"])
-    contacts_for_share = (db_contacts + osm_contacts)[:3]
-    nearby_text = ""
-    if contacts_for_share:
-        c0 = contacts_for_share[0]
-        nearby_text = f"\nNearest: {c0['name']} ({c0.get('distance_km','?')} km) - {c0.get('phone') or '108'}"
-    share_msg = (
-        f"ROAD EMERGENCY at {location_display or 'my location'}\n"
-        f"Urgency: {intent['urgency'].upper()}\n"
-        f"CALL 112 immediately{nearby_text}\n"
+
+    contacts_for_share = (db_contacts + osm_contacts)[:1]
+    _near_name  = contacts_for_share[0]["name"]  if contacts_for_share else ""
+    _near_phone = contacts_for_share[0].get("phone","108") if contacts_for_share else ""
+
+    _wa_url_rich = _build_wa_url(
+        lat           = gps_lat,
+        lon           = gps_lon,
+        situation     = user_msg[:120] if user_msg else "",
+        urgency       = intent.get("urgency",""),
+        nearest_name  = _near_name,
+        nearest_phone = _near_phone,
+    )
+
+    # SMS fallback (shorter message)
+    _sms_body = (
+        f"ROAD ACCIDENT {location_display or ''}\n"
+        f"Urgency: {intent.get('urgency','?').upper()}\n"
+        f"{('GPS: https://maps.google.com/?q=' + str(gps_lat) + ',' + str(gps_lon)) if gps_lat else ''}\n"
+        f"CALL 112 | 108\n"
         f"Sent via RoadSoS"
     )
-    wa_url  = f"https://wa.me/?text={urllib.parse.quote(share_msg)}"
-    sms_url = f"sms:?body={urllib.parse.quote(share_msg)}"
+    sms_url = f"sms:?body={urllib.parse.quote(_sms_body.strip())}"
+
+    # Urgency colour
+    _urg = intent.get("urgency","medium")
+    _urg_colour = {"critical":"#DC2626","high":"#EA580C","medium":"#D97706","low":"#16A34A"}.get(_urg,"#D97706")
+
     st.html(f"""
-    <div style="display:flex;gap:12px;margin:6px 0;font-family:system-ui,sans-serif">
-      <a href="{wa_url}" style="flex:1;background:#16A34A;color:#FFFFFF;border-radius:10px;
-         font-size:16px;font-weight:600;padding:14px 10px;text-decoration:none;
-         display:block;text-align:center">📲 WhatsApp</a>
-      <a href="{sms_url}" style="flex:1;background:#1D4ED8;color:#FFFFFF;border-radius:10px;
-         font-size:16px;font-weight:600;padding:14px 10px;text-decoration:none;
-         display:block;text-align:center">💬 SMS</a>
+<div style="font-family:system-ui,sans-serif;margin:4px 0 10px 0">
+
+  <!-- Rich WhatsApp card -->
+  <div style="background:linear-gradient(135deg,#16A34A 0%,#15803D 100%);
+              border-radius:14px;padding:14px 16px;margin-bottom:10px;position:relative;overflow:hidden">
+    <div style="position:absolute;right:-15px;top:-15px;width:70px;height:70px;
+                background:rgba(255,255,255,0.08);border-radius:50%"></div>
+
+    <div style="font-size:13px;font-weight:700;color:rgba(255,255,255,0.85);
+                margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px">
+      📲 Full Emergency Card — WhatsApp
     </div>
-    <div style="font-size:13px;color:#9CA3AF;text-align:center;margin-top:4px;font-family:system-ui,sans-serif">{T["share_caption"]}</div>
-    """)
+
+    <!-- Message preview -->
+    <div style="background:rgba(255,255,255,0.12);border-radius:10px;
+                padding:10px 12px;margin-bottom:10px;font-size:11.5px;
+                color:rgba(255,255,255,0.95);line-height:1.75;font-family:monospace">
+      🚨 ROAD ACCIDENT — URGENT HELP<br>
+      {("📍 " + str(round(gps_lat,4)) + ", " + str(round(gps_lon,4))) if gps_lat else "📍 Location text shared"}<br>
+      {("🗺️ maps.google.com/?q=" + str(gps_lat) + "," + str(gps_lon) + "<br>") if gps_lat else ""}
+      {("🚗 " + user_msg[:80] + ("…" if len(user_msg) > 80 else "") + "<br>") if user_msg else ""}
+      <span style="color:#FDE68A;font-weight:700">⚠️ Urgency: {_urg.upper()}</span><br>
+      {("🏥 " + _near_name + " — " + _near_phone + "<br>") if _near_name else ""}
+      📞 112 · 108 · 1033 &nbsp;⏰ {datetime.now().strftime("%I:%M %p")}
+    </div>
+
+    <a href="{_wa_url_rich}" target="_blank"
+       style="display:block;background:#FFFFFF;color:#16A34A;border-radius:10px;
+              font-size:17px;font-weight:800;padding:13px;text-align:center;
+              text-decoration:none;letter-spacing:0.3px">
+      📤 Send on WhatsApp
+    </a>
+    <div style="font-size:11px;color:rgba(255,255,255,0.7);text-align:center;margin-top:7px">
+      You choose who to send to · Location · situation · nearest hospital included
+    </div>
+  </div>
+
+  <!-- SMS fallback -->
+  <a href="{sms_url}"
+     style="display:block;background:#1D4ED8;color:#FFFFFF;border-radius:10px;
+            font-size:15px;font-weight:700;padding:12px;text-align:center;
+            text-decoration:none">
+    💬 Send as SMS (no internet needed)
+  </a>
+  <div style="font-size:11px;color:#9CA3AF;text-align:center;margin-top:5px">
+    {T["share_caption"]}
+  </div>
+
+</div>
+""")
 
 elif go:
     st.warning(T["no_input"])
