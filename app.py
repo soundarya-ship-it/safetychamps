@@ -238,7 +238,7 @@ def fetch_osm_contacts(lat, lon, radius_m=15000, categories=None):
     query = f'[out:json][timeout:25];\n(\n{"".join(parts)}\n);\nout body center;'
 
     try:
-        resp = http.post(OVERPASS_URL, data={"data": query}, timeout=25)
+        resp = http.post(OVERPASS_URL, data={"data": query}, timeout=10)
         elements = resp.json().get("elements", [])
     except Exception as e:
         st.warning(f"OSM query issue (check internet): {e}")
@@ -1127,6 +1127,31 @@ if go and (user_msg or (gps_lat != 0.0 and gps_lon != 0.0)):
     if _is_critical and "blood_bank" not in _osm_cats:
         _osm_cats.append("blood_bank")
 
+    if not lat or not lon:
+        # Location could not be resolved — still show actionable numbers
+        st.markdown("""
+<div style="background:#FFFBEB;border:2px solid #D97706;border-radius:14px;
+            padding:16px 18px;margin:10px 0;font-family:system-ui,sans-serif">
+  <div style="font-size:15px;font-weight:700;color:#92400E;margin-bottom:4px">
+    📍 Location not resolved — tap GPS button above or type a city name
+  </div>
+  <div style="font-size:13px;color:#4B5563;margin-bottom:14px">
+    While you do that, these numbers work <strong>anywhere in India right now:</strong>
+  </div>
+  <div style="display:flex;gap:8px">
+    <a href="tel:112" style="flex:1;background:#DC2626;color:#FFFFFF;border-radius:10px;
+       padding:16px 4px;text-align:center;text-decoration:none;font-size:28px;
+       font-weight:800;letter-spacing:1px;display:block">112</a>
+    <a href="tel:108" style="flex:1;background:#16A34A;color:#FFFFFF;border-radius:10px;
+       padding:16px 4px;text-align:center;text-decoration:none;font-size:28px;
+       font-weight:800;letter-spacing:1px;display:block">108</a>
+    <a href="tel:1033" style="flex:1;background:#1D4ED8;color:#FFFFFF;border-radius:10px;
+       padding:16px 4px;text-align:center;text-decoration:none;font-size:22px;
+       font-weight:800;letter-spacing:1px;display:block;line-height:1.4">1033</a>
+  </div>
+</div>
+""", unsafe_allow_html=True)
+
     if lat and lon:
         with st.spinner(T["spinner_search"]):
             db_contacts  = fetch_db_contacts(lat, lon, radius_km)
@@ -1229,7 +1254,34 @@ if go and (user_msg or (gps_lat != 0.0 and gps_lon != 0.0)):
                             record_feedback(cid, False)
                             st.error(T["feedback_fail"])
         else:
-            st.info(T["no_contacts"])
+            # No local contacts from DB or OSM — show national numbers prominently
+            st.markdown("""
+<div style="background:#FEF2F2;border:2px solid #DC2626;border-radius:14px;
+            padding:16px 18px;margin:10px 0;font-family:system-ui,sans-serif">
+  <div style="font-size:15px;font-weight:700;color:#991B1B;margin-bottom:4px">
+    ⚠️ No nearby contacts found in database for this area
+  </div>
+  <div style="font-size:13px;color:#4B5563;margin-bottom:14px">
+    OSM/DB may not have this location yet — but these national numbers work <strong>anywhere in India, 24×7:</strong>
+  </div>
+  <div style="display:flex;gap:8px">
+    <a href="tel:112" style="flex:1;background:#DC2626;color:#FFFFFF;border-radius:10px;
+       padding:16px 4px;text-align:center;text-decoration:none;font-size:28px;
+       font-weight:800;letter-spacing:1px;display:block">112</a>
+    <a href="tel:108" style="flex:1;background:#16A34A;color:#FFFFFF;border-radius:10px;
+       padding:16px 4px;text-align:center;text-decoration:none;font-size:28px;
+       font-weight:800;letter-spacing:1px;display:block">108</a>
+    <a href="tel:1033" style="flex:1;background:#1D4ED8;color:#FFFFFF;border-radius:10px;
+       padding:16px 4px;text-align:center;text-decoration:none;font-size:22px;
+       font-weight:800;letter-spacing:1px;display:block;line-height:1.4">1033</a>
+  </div>
+  <div style="font-size:11px;color:#6B7280;margin-top:10px;line-height:1.7">
+    📞 112 — Emergency (Police · Ambulance · Fire) &nbsp;|&nbsp;
+    📞 108 — NHM Ambulance (29 states) &nbsp;|&nbsp;
+    📞 1033 — NHAI Highway Helpline
+  </div>
+</div>
+""", unsafe_allow_html=True)
 
     # 7. Share — rich card with full situation context
     st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
