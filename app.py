@@ -600,7 +600,7 @@ params = st.query_params
 auto_lat = float(params["lat"]) if "lat" in params else 0.0
 auto_lon = float(params["lon"]) if "lon" in params else 0.0
 
-st.components.v1.html("""
+st.html("""
 <style>
 #gps-btn {
     background:#1d4ed8;color:white;border:none;
@@ -611,7 +611,7 @@ st.components.v1.html("""
 #gps-status{font-size:13px;color:#555;text-align:center;min-height:20px;}
 #gps-coords{font-size:13px;color:#1d4ed8;text-align:center;margin-top:4px;font-weight:600;}
 </style>
-<button id="gps-btn" onclick="getGPS()">Use My Phone Location (GPS)</button>
+<button id="gps-btn" onclick="getGPS()">📍 Use My Phone Location (GPS)</button>
 <div id="gps-status">Tap above to auto-fill your coordinates</div>
 <div id="gps-coords"></div>
 <script>
@@ -631,7 +631,7 @@ function getGPS() {
     status.textContent = 'Requesting GPS — please allow location access';
     if (!navigator.geolocation) {
         status.textContent = 'GPS not available on this device';
-        btn.disabled = false; btn.textContent = 'Use My Phone Location (GPS)';
+        btn.disabled = false; btn.textContent = '📍 Use My Phone Location (GPS)';
         return;
     }
     navigator.geolocation.getCurrentPosition(
@@ -639,7 +639,7 @@ function getGPS() {
             var lat = pos.coords.latitude.toFixed(5);
             var lon = pos.coords.longitude.toFixed(5);
             var acc = Math.round(pos.coords.accuracy);
-            btn.textContent = 'Location found!';
+            btn.textContent = '✅ Location found!';
             status.textContent = 'Accuracy: ' + acc + ' m — loading...';
             var url = window.top.location.pathname + '?lat=' + lat + '&lon=' + lon;
             var ok = tryNav(url);
@@ -652,13 +652,13 @@ function getGPS() {
             var msgs = {1:'Permission denied — tap the lock icon in browser',
                         2:'Position unavailable', 3:'Timeout — try again'};
             status.textContent = 'GPS: ' + (msgs[err.code] || err.message);
-            btn.disabled = false; btn.textContent = 'Use My Phone Location (GPS)';
+            btn.disabled = false; btn.textContent = '📍 Use My Phone Location (GPS)';
         },
         {enableHighAccuracy:true, timeout:15000, maximumAge:30000}
     );
 }
 </script>
-""", height=110)
+""")
 
 if auto_lat != 0.0 and auto_lon != 0.0:
     st.success(f"GPS location captured: {auto_lat:.4f}, {auto_lon:.4f}")
