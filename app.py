@@ -760,85 +760,66 @@ with st.sidebar:
 # ── Input section ─────────────────────────────────────────────────────────────
 st.subheader("🆘 " + T["input_header"])
 
-# ── GPS auto-location via browser Geolocation API ────────────────────────────
-params = st.query_params
-auto_lat = float(params["lat"]) if "lat" in params else 0.0
-auto_lon = float(params["lon"]) if "lon" in params else 0.0
+# ── GPS auto-location ─────────────────────────────────────────────────────────
+# Uses streamlit-js-eval which runs JS in the main page (not a sandboxed iframe),
+# so mobile browsers (Chrome Android, Samsung Internet, Safari iOS) grant permission.
 
-st.html("""
-<style>
-#gps-btn {
-    background:#1D4ED8;color:#FFFFFF;border:none;
-    padding:15px 20px;border-radius:10px;font-size:17px;
-    font-weight:600;width:100%;cursor:pointer;margin-bottom:4px;
-    letter-spacing:0.3px;font-family:system-ui,sans-serif;
-}
-#gps-btn:active{background:#1E40AF;}
-#gps-status{font-size:13px;color:#4B5563;text-align:center;min-height:18px;font-family:system-ui,sans-serif;}
-#gps-coords{margin-top:6px;font-family:system-ui,sans-serif;}
-</style>
-<button id="gps-btn" onclick="getGPS()">📍 Auto-detect My Location</button>
-<div id="gps-status"></div>
-<div id="gps-coords"></div>
-<script>
-function getGPS() {
-    var btn    = document.getElementById('gps-btn');
-    var status = document.getElementById('gps-status');
-    var coords = document.getElementById('gps-coords');
-    btn.disabled = true;
-    btn.textContent = 'Detecting location...';
-    status.textContent = 'Allow location access when prompted';
-    if (!navigator.geolocation) {
-        status.textContent = 'GPS not available — enter coordinates manually below';
-        btn.disabled = false; btn.textContent = '📍 Auto-detect My Location';
-        return;
-    }
-    navigator.geolocation.getCurrentPosition(
-        function(pos) {
-            var lat = pos.coords.latitude.toFixed(5);
-            var lon = pos.coords.longitude.toFixed(5);
-            var acc = Math.round(pos.coords.accuracy);
+if "gps_lat" not in st.session_state:
+    st.session_state.gps_lat = 0.0
+if "gps_lon" not in st.session_state:
+    st.session_state.gps_lon = 0.0
+if "_gps_pending" not in st.session_state:
+    st.session_state["_gps_pending"] = False
 
-            /* Try to pass coords to Streamlit via URL — only window.top/parent,
-               never window.location (that would reload the iframe and cause reboots) */
-            var navigated = false;
-            var url = '?lat=' + lat + '&lon=' + lon;
-            try { window.top.location.href = window.top.location.pathname + url; navigated = true; } catch(e) {}
-            if (!navigated) {
-                try { window.parent.location.href = window.parent.location.pathname + url; navigated = true; } catch(e) {}
-            }
+# Accept coordinates passed via URL query params (backwards compat / desktop)
+_params = st.query_params
+if "lat" in _params and "lon" in _params and not st.session_state.gps_lat:
+    try:
+        st.session_state.gps_lat = float(_params["lat"])
+        st.session_state.gps_lon = float(_params["lon"])
+    except Exception:
+        pass
 
-            if (navigated) {
-                status.textContent = 'Loading your location...';
-            } else {
-                /* Sandbox blocked navigation — show coords clearly for manual entry */
-                btn.textContent = '✅ Location detected';
-                status.textContent = 'Accuracy: ' + acc + 'm';
-                coords.innerHTML =
-                    '<div style="background:#EFF6FF;border:2px solid #1D4ED8;border-radius:10px;'
-                    + 'padding:12px 16px;text-align:center">'
-                    + '<div style="font-size:12px;color:#4B5563;margin-bottom:4px">📍 Your coordinates (copy into fields below)</div>'
-                    + '<div style="font-size:20px;font-weight:800;color:#111827;letter-spacing:1px">'
-                    + lat + ', ' + lon + '</div>'
-                    + '<div style="font-size:11px;color:#9CA3AF;margin-top:4px">Expand "Enter coordinates manually" below and paste these</div>'
-                    + '</div>';
-            }
-        },
-        function(err) {
-            var msgs = {1:'Location permission denied — tap the 🔒 icon in address bar',
-                        2:'Position unavailable — try outdoors',
-                        3:'Timed out — try again'};
-            status.textContent = msgs[err.code] || err.message;
-            btn.disabled = false; btn.textContent = '📍 Auto-detect My Location';
-        },
-        {enableHighAccuracy:true, timeout:15000, maximumAge:30000}
-    );
-}
-</script>
-""")
+try:
+    from streamlit_js_eval import get_geolocation as _get_geolocation
+    _GPS_COMPONENT = True
+except ImportError:
+    _GPS_COMPONENT = False
+
+if _GPS_COMPONENT:
+    _gcol1, _gcol2 = st.columns([5, 1])
+    with _gcol1:
+        _gps_already = bool(st.session_state.gps_lat)
+        _btn_label = "✅ Location Detected — tap to re-detect" if _gps_already else "📍 Auto-detect My Location"
+        if st.button(_btn_label, use_container_width=True):
+            st.session_state["_gps_pending"] = True
+            st.session_state.gps_lat = 0.0
+            st.session_state.gps_lon = 0.0
+    with _gcol2:
+        if st.session_state.gps_lat:
+            if st.button("🗑️", help="Clear GPS", use_container_width=True):
+                st.session_state.gps_lat = 0.0
+                st.session_state.gps_lon = 0.0
+                st.session_state["_gps_pending"] = False
+                st.rerun()
+
+    if st.session_state.get("_gps_pending"):
+        st.caption("⏳ Requesting your location — please **Allow** when your browser prompts…")
+        _loc = _get_geolocation()
+        if _loc and isinstance(_loc, dict) and _loc.get("coords"):
+            st.session_state.gps_lat = float(_loc["coords"]["latitude"])
+            st.session_state.gps_lon = float(_loc["coords"]["longitude"])
+            st.session_state["_gps_pending"] = False
+            st.rerun()
+else:
+    # Fallback for local dev without streamlit-js-eval installed
+    st.info("Install `streamlit-js-eval` for one-tap GPS detection on mobile.")
+
+auto_lat = st.session_state.gps_lat
+auto_lon = st.session_state.gps_lon
 
 if auto_lat != 0.0 and auto_lon != 0.0:
-    st.success(f"GPS location captured: {auto_lat:.4f}, {auto_lon:.4f}")
+    st.success(f"📍 GPS location: {auto_lat:.4f}, {auto_lon:.4f}")
     # Proactive black spot check on GPS capture
     _gps_spots = check_blackspot_proximity(auto_lat, auto_lon, radius_km=10)
     if _gps_spots:
