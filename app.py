@@ -62,34 +62,43 @@ DB_PATH = os.path.join(os.path.dirname(__file__), "roadsos.db")
 @st.cache_resource
 def _init_db_once():
     """
-    Initialise and seed the DB exactly once per app instance.
-    @st.cache_resource ensures this never runs twice — no WebSocket timeouts
-    from repeated heavy seeding on every browser refresh.
+    Seed DB only if it is missing or empty.
+    If roadsos.db is committed to the repo (preferred), this function returns
+    immediately with zero work — no cold-start timeout on Streamlit Cloud.
     """
-    if not os.path.exists(DB_PATH):
-        try:
-            from database.init_db import (
-                init_db as _init_db,
-                seed_national_numbers,
-                seed_tier2_contacts,
-                seed_roadside_services,
-                seed_trauma_centres,
-                seed_blood_banks,
-            )
-            _conn = _init_db()
-            seed_national_numbers(_conn)
-            seed_tier2_contacts(_conn)
-            seed_roadside_services(_conn)
-            seed_trauma_centres(_conn)
-            seed_blood_banks(_conn)
-            _conn.close()
-        except Exception:
-            pass  # App still works without DB (Tier 1 numbers always shown)
-        try:
-            from database.verify_numbers import verify_all_contacts
-            verify_all_contacts(DB_PATH)
-        except Exception:
-            pass
+    try:
+        # If DB exists and already has contacts, skip all seeding
+        _n = sqlite3.connect(DB_PATH).execute(
+            "SELECT COUNT(*) FROM contacts"
+        ).fetchone()[0]
+        if _n > 0:
+            return DB_PATH  # pre-built DB found — nothing to do
+    except Exception:
+        pass  # Table missing or file missing — fall through to seed
+
+    try:
+        from database.init_db import (
+            init_db as _init_db,
+            seed_national_numbers,
+            seed_tier2_contacts,
+            seed_roadside_services,
+            seed_trauma_centres,
+            seed_blood_banks,
+        )
+        _conn = _init_db()
+        seed_national_numbers(_conn)
+        seed_tier2_contacts(_conn)
+        seed_roadside_services(_conn)
+        seed_trauma_centres(_conn)
+        seed_blood_banks(_conn)
+        _conn.close()
+    except Exception:
+        pass  # App still works without DB (Tier 1 numbers always shown)
+    try:
+        from database.verify_numbers import verify_all_contacts
+        verify_all_contacts(DB_PATH)
+    except Exception:
+        pass
     return DB_PATH
 
 _init_db_once()
