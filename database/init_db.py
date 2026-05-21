@@ -450,11 +450,118 @@ def seed_roadside_services(conn):
     print("[DB] Seeded " + str(len(services)) + " roadside services (towing + puncture).")
 
 
+def seed_trauma_centres(conn):
+    """
+    15 MoRTH-designated Level I / Level II Trauma Centres on major NHs.
+    These are government-funded facilities specifically equipped for road
+    accident victims — polytrauma OT, blood bank, ICU, 24x7 surgery.
+
+    Sources: MoRTH Trauma Care Facilities scheme, NHP, AIIMS annual reports.
+    Schema: (name, category, tier, phone, phone_alt,
+              address, lat, lon, state, district, source, confidence)
+    """
+    trauma = [
+        # ── NH-44 corridor (Delhi to Kanyakumari) ─────────────────────────────
+        ("AIIMS Trauma Centre New Delhi",
+         "trauma", 1, "011-26593308", "011-26589900",
+         "Ansari Nagar, New Delhi - NH-44/48 junction",
+         28.5671, 77.2100, "Delhi", "New Delhi", "aiims", 97),
+
+        ("Safdarjung Hospital Trauma Delhi",
+         "trauma", 2, "011-24673501", "011-24675555",
+         "Ansari Nagar West, New Delhi - NH-44 km 0",
+         28.5685, 77.2060, "Delhi", "New Delhi", "nhp", 93),
+
+        ("PGI Rohtak Trauma Centre - NH-44",
+         "trauma", 2, "01262-213434", "01262-211300",
+         "PGIMS Campus, Rohtak - NH-44 km 72",
+         28.8955, 76.6066, "Haryana", "Rohtak", "nhp", 88),
+
+        ("SNMC Agra Trauma Centre - NH-44",
+         "trauma", 2, "0562-2600155", "0562-2526100",
+         "Fatehabad Road, Agra - NH-44 km 205",
+         27.1767, 78.0081, "Uttar Pradesh", "Agra", "nhp", 87),
+
+        ("KGMC Lucknow Trauma Centre - NH-44",
+         "trauma", 2, "0522-2257540", "0522-2257450",
+         "Shah Mina Road, Lucknow - NH-44 km 490",
+         26.8578, 80.9166, "Uttar Pradesh", "Lucknow", "nhp", 90),
+
+        ("AIIMS Nagpur Trauma - NH-44",
+         "trauma", 2, "0712-2700005", "0712-2533466",
+         "MIHAN, Nagpur - NH-44 km 1063",
+         21.0936, 79.0476, "Maharashtra", "Nagpur", "aiims", 90),
+
+        ("NIMS Hyderabad Trauma - NH-44",
+         "trauma", 2, "040-23489000", "040-23324666",
+         "Punjagutta, Hyderabad - NH-44 km 1511",
+         17.4315, 78.4483, "Telangana", "Hyderabad", "nhp", 88),
+
+        # ── NH-48 corridor (Delhi-Bengaluru-Chennai) ──────────────────────────
+        ("SMS Hospital Jaipur Trauma - NH-48",
+         "trauma", 2, "0141-2518888", "0141-2560291",
+         "Tonk Road, Jaipur - NH-48 km 267",
+         26.8927, 75.8036, "Rajasthan", "Jaipur", "nhp", 90),
+
+        ("NIMHANS Bengaluru Neurotrauma - NH-44/48",
+         "trauma", 2, "080-46110007", "080-26995001",
+         "Hosur Road, Bengaluru - NH-44/48 junction",
+         12.9401, 77.5959, "Karnataka", "Bengaluru", "nhp", 92),
+
+        # ── NH-19 corridor (Delhi-Kolkata) ────────────────────────────────────
+        ("BHU Trauma Centre Varanasi - NH-19",
+         "trauma", 2, "0542-2367568", "0542-2508100",
+         "Lanka, Varanasi - NH-19 km 668",
+         25.2677, 82.9913, "Uttar Pradesh", "Varanasi", "nhp", 88),
+
+        # ── NH-16 corridor (Kolkata-Chennai coast) ────────────────────────────
+        ("SSKM Hospital Kolkata Trauma - NH-19/16",
+         "trauma", 2, "033-22041058", "033-22043143",
+         "AJC Bose Road, Kolkata - NH-16 start",
+         22.5420, 88.3503, "West Bengal", "Kolkata", "nhp", 90),
+
+        ("AIIMS Bhubaneswar Trauma - NH-16",
+         "trauma", 2, "0674-2476789", "0674-2476700",
+         "Sijua, Bhubaneswar - NH-16 km 512",
+         20.1534, 85.6745, "Odisha", "Bhubaneswar", "aiims", 91),
+
+        # ── NH-66 corridor (Mumbai-Kerala) ────────────────────────────────────
+        ("KEM Hospital Mumbai Trauma - NH-66",
+         "trauma", 2, "022-24107000", "022-24138000",
+         "Parel, Mumbai - NH-66 km 0",
+         19.0035, 72.8407, "Maharashtra", "Mumbai", "nhp", 92),
+
+        ("Government Medical College Kozhikode - NH-66",
+         "trauma", 2, "0495-2350216", "0495-2720100",
+         "Kozhikode Medical College, NH-66 km 1297",
+         11.2610, 75.7978, "Kerala", "Kozhikode", "nhp", 88),
+
+        # ── PGIMER Chandigarh — NH-44 north gateway ───────────────────────────
+        ("PGIMER Chandigarh Trauma - NH-44",
+         "trauma", 1, "0172-2756565", "0172-2755555",
+         "Sector 12, Chandigarh - NH-44 km 250 from Delhi",
+         30.7650, 76.7780, "Punjab", "Chandigarh", "aiims", 95),
+    ]
+
+    cur = conn.cursor()
+    for (name, cat, tier, phone, phone_alt, addr, lat, lon, state, dist, source, conf) in trauma:
+        cur.execute("""
+            INSERT OR IGNORE INTO contacts
+            (name, category, tier, phone, phone_alt, address, lat, lon,
+             state, district, country_code, source, confidence, is_active)
+            VALUES (?,?,?,?,?,?,?,?,?,?,'IN',?,?,1)
+        """, (name, cat, tier, phone, phone_alt, addr, lat, lon, state, dist, source, conf))
+
+    conn.commit()
+    print("[DB] Seeded " + str(len(trauma)) + " MoRTH trauma centres.")
+
+
 if __name__ == "__main__":
     conn = init_db()
     seed_national_numbers(conn)
     seed_tier2_contacts(conn)
     seed_roadside_services(conn)
+    seed_trauma_centres(conn)
     conn.close()
     # Run phonenumbers verification on all seeded contacts
     try:

@@ -67,11 +67,13 @@ def _auto_init_db():
                 seed_national_numbers,
                 seed_tier2_contacts,
                 seed_roadside_services,
+                seed_trauma_centres,
             )
             _conn = _init_db()
             seed_national_numbers(_conn)
             seed_tier2_contacts(_conn)
             seed_roadside_services(_conn)
+            seed_trauma_centres(_conn)
             _conn.close()
         except Exception:
             pass  # App still works without DB (Tier 1 numbers always shown)
@@ -145,6 +147,7 @@ CATEGORY_ICONS = {
     "towing": "🚛",   "puncture": "🔧", "pharmacy": "💊",
     "fire": "🚒",     "highway_helpline": "🛣️", "emergency": "🆘",
     "disaster": "⛑️", "helpline": "📞", "other": "📍",
+    "trauma": "🏨",   "fuel": "⛽",
 }
 
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"

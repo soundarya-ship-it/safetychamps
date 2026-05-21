@@ -20,12 +20,19 @@ CATEGORY_TAGS = {
     "towing":     [("shop", "car_repair"), ("amenity", "car_repair")],
     "puncture":   [("shop", "bicycle"), ("shop", "tyres"), ("shop", "car_repair")],
     "fuel":       [("amenity", "fuel")],
+    "trauma":     [("trauma", "yes"), ("emergency", "yes"), ("healthcare:speciality", "trauma_surgery")],
 }
 
 
 def build_overpass_query(lat: float, lon: float, radius_m: int, categories: list[str]) -> str:
     """Builds an Overpass QL query for multiple categories around a point."""
     parts = []
+    # For trauma, add an extra name-based search to catch MoRTH trauma centres
+    if "trauma" in categories:
+        parts.append(f'node["amenity"="hospital"]["name"~"[Tt]rauma",i](around:{radius_m},{lat},{lon});')
+        parts.append(f'way["amenity"="hospital"]["name"~"[Tt]rauma",i](around:{radius_m},{lat},{lon});')
+        parts.append(f'node["amenity"="hospital"]["emergency"="yes"](around:{radius_m},{lat},{lon});')
+        parts.append(f'way["amenity"="hospital"]["emergency"="yes"](around:{radius_m},{lat},{lon});')
     for cat in categories:
         for tag_key, tag_val in CATEGORY_TAGS.get(cat, []):
             parts.append(f'node["{tag_key}"="{tag_val}"](around:{radius_m},{lat},{lon});')
@@ -116,6 +123,11 @@ def _infer_category(tags: dict) -> str:
     shop = tags.get("shop", "")
     healthcare = tags.get("healthcare", "")
 
+    if tags.get("trauma") == "yes": return "trauma"
+    if healthcare == "trauma_surgery" or tags.get("healthcare:speciality","") == "trauma_surgery": return "trauma"
+    name_lower = tags.get("name","").lower()
+    if "trauma" in name_lower: return "trauma"
+    if amenity == "hospital" and emergency == "yes": return "trauma"
     if amenity == "hospital" or healthcare == "hospital": return "hospital"
     if amenity == "clinic":  return "hospital"
     if "ambulance" in amenity or "ambulance" in emergency: return "ambulance"
