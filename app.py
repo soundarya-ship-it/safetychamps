@@ -685,6 +685,7 @@ with _hcol2:
     )
     if _chosen != st.session_state.get("ui_lang"):
         st.session_state.ui_lang = _chosen
+        st.session_state["lang_select"] = _chosen   # keep sidebar in sync
         T = get_T()
         st.rerun()
     # ── Compact status row ──
@@ -729,6 +730,7 @@ with st.sidebar:
     )
     if chosen_lang != st.session_state.get("ui_lang"):
         st.session_state.ui_lang = chosen_lang
+        st.session_state["lang_main"] = chosen_lang   # keep header in sync
         T = get_T()
         st.rerun()
 
