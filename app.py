@@ -414,6 +414,60 @@ with col_h2:
         st.metric(T["metric_label"], n)
 
 
+# ── SOS BUTTON ───────────────────────────────────────────────────────────────
+st.components.v1.html("""
+<style>
+.sos-wrap {
+    display: flex; gap: 10px; margin: 8px 0 4px 0;
+}
+.sos-btn {
+    flex: 2;
+    background: #dc2626;
+    color: white;
+    border: none;
+    border-radius: 12px;
+    font-size: 22px;
+    font-weight: 900;
+    padding: 18px 10px;
+    cursor: pointer;
+    letter-spacing: 2px;
+    box-shadow: 0 4px 14px rgba(220,38,38,0.4);
+    text-decoration: none;
+    display: block;
+    text-align: center;
+}
+.sos-btn:active { background: #b91c1c; transform: scale(0.97); }
+.sos-ambulance {
+    flex: 1;
+    background: #16a34a;
+    color: white;
+    border: none;
+    border-radius: 12px;
+    font-size: 18px;
+    font-weight: 800;
+    padding: 18px 6px;
+    cursor: pointer;
+    text-decoration: none;
+    display: block;
+    text-align: center;
+}
+.sos-ambulance:active { background: #15803d; }
+.sos-note {
+    font-size: 11px;
+    color: #888;
+    text-align: center;
+    margin-top: 3px;
+}
+</style>
+<div class="sos-wrap">
+  <a class="sos-btn" href="tel:112">SOS 112</a>
+  <a class="sos-ambulance" href="tel:108">108 Ambulance</a>
+</div>
+<div class="sos-note">Tap to call immediately &bull; Works offline &bull; 24x7 India</div>
+""", height=100)
+
+st.divider()
+
 # ── Offline / Online mode banner ─────────────────────────────────────────────
 def _is_online():
     try:
