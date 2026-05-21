@@ -59,8 +59,13 @@ def _get_secret(key):
 # ── DB path + auto-init ───────────────────────────────────────────────────────
 DB_PATH = os.path.join(os.path.dirname(__file__), "roadsos.db")
 
-def _auto_init_db():
-    """Auto-initialise DB on first run (needed for Streamlit Cloud)."""
+@st.cache_resource
+def _init_db_once():
+    """
+    Initialise and seed the DB exactly once per app instance.
+    @st.cache_resource ensures this never runs twice — no WebSocket timeouts
+    from repeated heavy seeding on every browser refresh.
+    """
     if not os.path.exists(DB_PATH):
         try:
             from database.init_db import (
@@ -85,8 +90,9 @@ def _auto_init_db():
             verify_all_contacts(DB_PATH)
         except Exception:
             pass
+    return DB_PATH
 
-_auto_init_db()
+_init_db_once()
 
 # ══════════════════════════════════════════════════════════════════════════════
 # CORE FUNCTIONS (no external deps beyond requests)
@@ -487,56 +493,19 @@ with col_h2:
 
 
 # ── SOS BUTTON ───────────────────────────────────────────────────────────────
-st.components.v1.html("""
-<style>
-.sos-wrap {
-    display: flex; gap: 10px; margin: 8px 0 4px 0;
-}
-.sos-btn {
-    flex: 2;
-    background: #dc2626;
-    color: white;
-    border: none;
-    border-radius: 12px;
-    font-size: 22px;
-    font-weight: 900;
-    padding: 18px 10px;
-    cursor: pointer;
-    letter-spacing: 2px;
-    box-shadow: 0 4px 14px rgba(220,38,38,0.4);
-    text-decoration: none;
-    display: block;
-    text-align: center;
-}
-.sos-btn:active { background: #b91c1c; transform: scale(0.97); }
-.sos-ambulance {
-    flex: 1;
-    background: #16a34a;
-    color: white;
-    border: none;
-    border-radius: 12px;
-    font-size: 18px;
-    font-weight: 800;
-    padding: 18px 6px;
-    cursor: pointer;
-    text-decoration: none;
-    display: block;
-    text-align: center;
-}
-.sos-ambulance:active { background: #15803d; }
-.sos-note {
-    font-size: 11px;
-    color: #888;
-    text-align: center;
-    margin-top: 3px;
-}
-</style>
-<div class="sos-wrap">
-  <a class="sos-btn" href="tel:112">SOS 112</a>
-  <a class="sos-ambulance" href="tel:108">108 Ambulance</a>
+st.html("""
+<div style="display:flex;gap:10px;margin:8px 0 4px 0">
+  <a href="tel:112" style="flex:2;background:#dc2626;color:white;border-radius:12px;
+     font-size:22px;font-weight:900;padding:18px 10px;letter-spacing:2px;
+     text-decoration:none;display:block;text-align:center">SOS 112</a>
+  <a href="tel:108" style="flex:1;background:#16a34a;color:white;border-radius:12px;
+     font-size:18px;font-weight:800;padding:18px 6px;
+     text-decoration:none;display:block;text-align:center">108 Ambulance</a>
 </div>
-<div class="sos-note">Tap to call immediately &bull; Works offline &bull; 24x7 India</div>
-""", height=100)
+<div style="font-size:11px;color:#888;text-align:center;margin-top:3px">
+  Tap to call immediately &bull; Works offline &bull; 24x7 India
+</div>
+""")
 
 st.divider()
 
@@ -604,6 +573,8 @@ params = st.query_params
 auto_lat = float(params["lat"]) if "lat" in params else 0.0
 auto_lon = float(params["lon"]) if "lon" in params else 0.0
 
+# st.components.v1.html is needed here for JS geolocation — no pure-Streamlit alternative.
+# Deprecation warning is cosmetic; removal scheduled post June 2026 (after hackathon deadline).
 st.components.v1.html("""
 <style>
 #gps-btn {
