@@ -742,29 +742,22 @@ st.html("""
 }
 #gps-btn:active{background:#1E40AF;}
 #gps-status{font-size:13px;color:#4B5563;text-align:center;min-height:18px;font-family:system-ui,sans-serif;}
-#gps-coords{font-size:13px;color:#1D4ED8;text-align:center;margin-top:4px;font-weight:600;font-family:system-ui,sans-serif;}
+#gps-coords{margin-top:6px;font-family:system-ui,sans-serif;}
 </style>
 <button id="gps-btn" onclick="getGPS()">📍 Auto-detect My Location</button>
 <div id="gps-status"></div>
 <div id="gps-coords"></div>
 <script>
-function tryNav(url) {
-    var tried = false;
-    try { window.top.location.href = url; tried = true; } catch(e) {}
-    if (!tried) try { window.parent.location.href = url; tried = true; } catch(e) {}
-    if (!tried) try { window.location.href = url; tried = true; } catch(e) {}
-    return tried;
-}
 function getGPS() {
-    var btn = document.getElementById('gps-btn');
+    var btn    = document.getElementById('gps-btn');
     var status = document.getElementById('gps-status');
     var coords = document.getElementById('gps-coords');
     btn.disabled = true;
-    btn.textContent = 'Getting location...';
-    status.textContent = 'Requesting GPS — please allow location access';
+    btn.textContent = 'Detecting location...';
+    status.textContent = 'Allow location access when prompted';
     if (!navigator.geolocation) {
-        status.textContent = 'GPS not available on this device';
-        btn.disabled = false; btn.textContent = '📍 Use My Phone Location (GPS)';
+        status.textContent = 'GPS not available — enter coordinates manually below';
+        btn.disabled = false; btn.textContent = '📍 Auto-detect My Location';
         return;
     }
     navigator.geolocation.getCurrentPosition(
@@ -772,20 +765,38 @@ function getGPS() {
             var lat = pos.coords.latitude.toFixed(5);
             var lon = pos.coords.longitude.toFixed(5);
             var acc = Math.round(pos.coords.accuracy);
-            btn.textContent = '✅ Location found!';
-            status.textContent = 'Accuracy: ' + acc + ' m — loading...';
-            var url = window.top.location.pathname + '?lat=' + lat + '&lon=' + lon;
-            var ok = tryNav(url);
-            if (!ok) {
-                status.textContent = 'GPS got: ' + lat + ', ' + lon + ' (acc ' + acc + 'm)';
-                coords.innerHTML = 'Enter manually below: <b>Lat ' + lat + ' | Lon ' + lon + '</b>';
+
+            /* Try to pass coords to Streamlit via URL — only window.top/parent,
+               never window.location (that would reload the iframe and cause reboots) */
+            var navigated = false;
+            var url = '?lat=' + lat + '&lon=' + lon;
+            try { window.top.location.href = window.top.location.pathname + url; navigated = true; } catch(e) {}
+            if (!navigated) {
+                try { window.parent.location.href = window.parent.location.pathname + url; navigated = true; } catch(e) {}
+            }
+
+            if (navigated) {
+                status.textContent = 'Loading your location...';
+            } else {
+                /* Sandbox blocked navigation — show coords clearly for manual entry */
+                btn.textContent = '✅ Location detected';
+                status.textContent = 'Accuracy: ' + acc + 'm';
+                coords.innerHTML =
+                    '<div style="background:#EFF6FF;border:2px solid #1D4ED8;border-radius:10px;'
+                    + 'padding:12px 16px;text-align:center">'
+                    + '<div style="font-size:12px;color:#4B5563;margin-bottom:4px">📍 Your coordinates (copy into fields below)</div>'
+                    + '<div style="font-size:20px;font-weight:800;color:#111827;letter-spacing:1px">'
+                    + lat + ', ' + lon + '</div>'
+                    + '<div style="font-size:11px;color:#9CA3AF;margin-top:4px">Expand "Enter coordinates manually" below and paste these</div>'
+                    + '</div>';
             }
         },
         function(err) {
-            var msgs = {1:'Permission denied — tap the lock icon in browser',
-                        2:'Position unavailable', 3:'Timeout — try again'};
-            status.textContent = 'GPS: ' + (msgs[err.code] || err.message);
-            btn.disabled = false; btn.textContent = '📍 Use My Phone Location (GPS)';
+            var msgs = {1:'Location permission denied — tap the 🔒 icon in address bar',
+                        2:'Position unavailable — try outdoors',
+                        3:'Timed out — try again'};
+            status.textContent = msgs[err.code] || err.message;
+            btn.disabled = false; btn.textContent = '📍 Auto-detect My Location';
         },
         {enableHighAccuracy:true, timeout:15000, maximumAge:30000}
     );
