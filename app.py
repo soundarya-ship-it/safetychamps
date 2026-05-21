@@ -801,6 +801,8 @@ if _GPS_COMPONENT:
                 st.session_state.gps_lat = 0.0
                 st.session_state.gps_lon = 0.0
                 st.session_state["_gps_pending"] = False
+                st.session_state["_manual_lat"] = 0.0
+                st.session_state["_manual_lon"] = 0.0
                 st.rerun()
 
     if st.session_state.get("_gps_pending"):
@@ -809,6 +811,9 @@ if _GPS_COMPONENT:
         if _loc and isinstance(_loc, dict) and _loc.get("coords"):
             st.session_state.gps_lat = float(_loc["coords"]["latitude"])
             st.session_state.gps_lon = float(_loc["coords"]["longitude"])
+            # Pre-seed the manual number inputs so they show the GPS coords
+            st.session_state["_manual_lat"] = st.session_state.gps_lat
+            st.session_state["_manual_lon"] = st.session_state.gps_lon
             st.session_state["_gps_pending"] = False
             st.rerun()
 else:
@@ -941,9 +946,16 @@ gps_lat, gps_lon = auto_lat, auto_lon  # default from GPS button
 with st.expander("Enter coordinates manually (optional)"):
     col_lat, col_lon = st.columns(2)
     with col_lat:
-        gps_lat = st.number_input(T["lat_label"], value=auto_lat, format="%.5f", step=0.001)
+        gps_lat = st.number_input(T["lat_label"], value=auto_lat, format="%.5f", step=0.001, key="_manual_lat")
     with col_lon:
-        gps_lon = st.number_input(T["lon_label"], value=auto_lon, format="%.5f", step=0.001)
+        gps_lon = st.number_input(T["lon_label"], value=auto_lon, format="%.5f", step=0.001, key="_manual_lon")
+
+# Safety-net: number_input ignores value= after first render, so GPS session state
+# always wins over a stale 0.0 stored in the widget
+if auto_lat != 0.0 and gps_lat == 0.0:
+    gps_lat = auto_lat
+if auto_lon != 0.0 and gps_lon == 0.0:
+    gps_lon = auto_lon
 
 go = st.button("🔍 Find Emergency Help Near Me", type="primary", use_container_width=True)
 
