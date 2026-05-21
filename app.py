@@ -964,20 +964,27 @@ user_msg = st.text_area(
     height=80,
 )
 
-gps_lat, gps_lon = auto_lat, auto_lon  # default from GPS button
+# Pre-seed session state keys so number_input reads from them (avoids
+# the "value= conflicts with session state" warning in Streamlit >=1.35)
+if "_manual_lat" not in st.session_state:
+    st.session_state["_manual_lat"] = auto_lat
+if "_manual_lon" not in st.session_state:
+    st.session_state["_manual_lon"] = auto_lon
+# If GPS just fired, push the new coords into the widget keys
+if auto_lat != 0.0 and st.session_state["_manual_lat"] == 0.0:
+    st.session_state["_manual_lat"] = auto_lat
+if auto_lon != 0.0 and st.session_state["_manual_lon"] == 0.0:
+    st.session_state["_manual_lon"] = auto_lon
+
 with st.expander("Enter coordinates manually (optional)"):
     col_lat, col_lon = st.columns(2)
     with col_lat:
-        gps_lat = st.number_input(T["lat_label"], value=auto_lat, format="%.5f", step=0.001, key="_manual_lat")
+        gps_lat = st.number_input(T["lat_label"], format="%.5f", step=0.001, key="_manual_lat")
     with col_lon:
-        gps_lon = st.number_input(T["lon_label"], value=auto_lon, format="%.5f", step=0.001, key="_manual_lon")
+        gps_lon = st.number_input(T["lon_label"], format="%.5f", step=0.001, key="_manual_lon")
 
-# Safety-net: number_input ignores value= after first render, so GPS session state
-# always wins over a stale 0.0 stored in the widget
-if auto_lat != 0.0 and gps_lat == 0.0:
-    gps_lat = auto_lat
-if auto_lon != 0.0 and gps_lon == 0.0:
-    gps_lon = auto_lon
+gps_lat = gps_lat or auto_lat
+gps_lon = gps_lon or auto_lon
 
 go = st.button("🔍 Find Emergency Help Near Me", type="primary", use_container_width=True)
 
