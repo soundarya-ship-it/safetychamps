@@ -480,15 +480,32 @@ st.markdown("""
   --fw-bold:    800;
 }
 
+/* ── Hide Streamlit chrome (toolbar, footer, deploy button) ── */
+[data-testid="stHeader"]        { display: none !important; }
+[data-testid="stToolbar"]       { display: none !important; }
+[data-testid="stDeployButton"]  { display: none !important; }
+[data-testid="stDecoration"]    { display: none !important; }
+footer                          { display: none !important; }
+#MainMenu                       { display: none !important; }
+
 /* ── Layout ── */
 .block-container {
-  padding-top: 3rem !important;
+  padding-top: 0.75rem !important;
   padding-left: 1rem !important;
   padding-right: 1rem !important;
   max-width: 900px;
   font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   color: var(--c-text);
 }
+
+/* ── Tighten vertical rhythm — no surprise gaps ── */
+.stMarkdown p { margin-bottom: 0.2rem !important; }
+div[data-testid="stVerticalBlock"] > div[data-testid="stVerticalBlockBorderWrapper"] {
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+}
+/* Remove bottom margin on section headers */
+h3 { margin-top: 0.6rem !important; margin-bottom: 0.3rem !important; }
 
 /* ── Tier 1 emergency numbers ── */
 .tier1 {
@@ -592,22 +609,40 @@ div.stButton > button[kind="primary"] {
   font-size: var(--fs-base);
 }
 
-/* ── MOBILE (under 768px) ── */
-@media (max-width: 768px) {
-  [data-testid="column"] {
-    width: 100% !important;
-    flex: 1 1 100% !important;
-    min-width: 100% !important;
-  }
+/* ── Language selectbox — compact pill style ── */
+div[data-testid="stSelectbox"] > div > div {
+  border-radius: 20px !important;
+  border-color: var(--c-border) !important;
+  font-size: 13px !important;
+  min-height: 34px !important;
+  padding: 2px 10px !important;
+  background: var(--c-surface) !important;
+}
+div[data-testid="stSelectbox"] > div > div:focus-within {
+  border-color: var(--c-blue) !important;
+  box-shadow: 0 0 0 2px rgba(29,78,216,0.15) !important;
+}
+/* Remove extra space that Streamlit adds around the selectbox */
+div[data-testid="stSelectbox"] { margin-bottom: 0 !important; }
+
+/* ── MOBILE (under 600px) ── */
+@media (max-width: 600px) {
+  /* Only stack columns that aren't the main header pair */
   .tier1 { padding: 16px 8px !important; margin: 3px !important; }
   .tier1 .num { font-size: 38px !important; }
   .tier1 .lbl { font-size: 13px !important; }
   .big-phone  { font-size: 30px !important; }
-  .block-container { padding-left: 0.5rem !important; padding-right: 0.5rem !important; }
+  .block-container {
+    padding-top: 0.5rem !important;
+    padding-left: 0.5rem !important;
+    padding-right: 0.5rem !important;
+  }
   div.stButton > button { min-height: 54px !important; font-size: 17px !important; width: 100% !important; }
   .gh-green strong, .gh-amber strong, .gh-red strong { font-size: 17px !important; }
   section[data-testid="stSidebar"] { min-width: 280px !important; }
   textarea, input { font-size: 16px !important; }
+  /* Emergency subheader slightly smaller on mobile */
+  h3 { font-size: 18px !important; }
 }
 </style>
 """, unsafe_allow_html=True)
@@ -631,19 +666,34 @@ try:
 except Exception:
     _n_contacts = 0
 
-_hcol1, _hcol2 = st.columns([3, 1])
+_hcol1, _hcol2 = st.columns([5, 3])
 with _hcol1:
     st.markdown("## 🚨 RoadSoS Buddy")
-    st.caption(f"by Safety Champs · {T['tagline']}")
+    st.caption("by Safety Champs · India emergency assistant")
 with _hcol2:
+    # ── Language selector — lives here so it's always visible ──
+    _lang_codes = list(LANG_OPTIONS.keys())
+    _lang_idx = _lang_codes.index(st.session_state.get("ui_lang", "en"))
+    _chosen = st.selectbox(
+        "🌐",
+        options=_lang_codes,
+        format_func=lambda x: LANG_OPTIONS[x],
+        index=_lang_idx,
+        key="lang_main",
+        label_visibility="collapsed",
+        help="Change language / भाषा बदलें / மொழி மாற்று",
+    )
+    if _chosen != st.session_state.get("ui_lang"):
+        st.session_state.ui_lang = _chosen
+        T = get_T()
+        st.rerun()
+    # ── Compact status row ──
     st.markdown(
-        f'<div style="text-align:right;padding-top:4px;font-family:system-ui,sans-serif">'
-        f'<div style="font-size:24px;font-weight:800;color:#064E3B;line-height:1">'
-        f'{_n_contacts if _n_contacts else "–"}</div>'
-        f'<div style="font-size:11px;color:#9CA3AF;line-height:1.5;margin-top:2px">'
-        f'verified<br>contacts</div>'
-        f'<div style="font-size:12px;color:#4B5563;margin-top:5px">'
-        f'{_online_dot}&nbsp;{_online_txt}</div>'
+        f'<div style="text-align:right;font-family:system-ui,sans-serif;margin-top:0px">'
+        f'<span style="font-size:19px;font-weight:800;color:#064E3B">'
+        f'{_n_contacts if _n_contacts else "–"}</span>'
+        f'<span style="font-size:10px;color:#9CA3AF;margin-left:3px">contacts</span>'
+        f'&nbsp;&nbsp;{_online_dot}'
         f'</div>',
         unsafe_allow_html=True
     )
@@ -703,29 +753,8 @@ with st.sidebar:
     st.caption("IIT Madras Road Safety Hackathon 2026")
     st.caption("Soundarya · Shreya · Ashwin")
 
-# ── Language selector — compact strip ────────────────────────────────────────
-_lc1, _lc2, _lc3 = st.columns([1, 2, 1])
-with _lc2:
-    _lang_codes = list(LANG_OPTIONS.keys())
-    _lang_idx = _lang_codes.index(st.session_state.get("ui_lang", "en"))
-    _chosen = st.selectbox(
-        "🌐",
-        options=_lang_codes,
-        format_func=lambda x: LANG_OPTIONS[x],
-        index=_lang_idx,
-        key="lang_main",
-        label_visibility="collapsed",
-        help="Change language / भाषा बदलें / மொழி மாற்று",
-    )
-    if _chosen != st.session_state.get("ui_lang"):
-        st.session_state.ui_lang = _chosen
-        T = get_T()
-        st.rerun()
-
-st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
-
 # ── Input section ─────────────────────────────────────────────────────────────
-st.subheader("📍 " + T["input_header"])
+st.subheader("🆘 " + T["input_header"])
 
 # ── GPS auto-location via browser Geolocation API ────────────────────────────
 params = st.query_params
