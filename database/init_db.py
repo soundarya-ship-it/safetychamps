@@ -313,6 +313,7 @@ def seed_blood_banks(conn):
 
 if __name__ == "__main__":
     from database.seed_districts import seed_districts
+    from database.seed_specialty_hospitals import seed_specialty_hospitals
     conn = init_db()
     seed_national_numbers(conn)
     seed_tier2_contacts(conn)
@@ -320,6 +321,7 @@ if __name__ == "__main__":
     seed_trauma_centres(conn)
     seed_blood_banks(conn)
     seed_districts(conn)
+    seed_specialty_hospitals(conn)
     conn.close()
     # Run phonenumbers verification on all seeded contacts
     try:
