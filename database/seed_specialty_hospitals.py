@@ -363,6 +363,230 @@ SPECIALTY_HOSPITALS = [
      "ortho_trauma", 2, "0141-2518291", "0141-2560291",
      "Tonk Road, Jaipur — largest ortho trauma in Rajasthan; NH-48",
      26.8927, 75.8036, "Rajasthan", "Jaipur", "nhp", 89),
+
+    # =========================================================
+    # MAJOR DISTRICT TOWNS MISSING FROM TIER-2
+    # Large cities (>200k pop) not covered by metro seed above
+    # =========================================================
+
+    # TAMIL NADU — missing large towns
+    ("Government Headquarters Hospital Tiruppur",
+     "hospital", 2, "0421-2200800", None,
+     "Avinashi Road, Tiruppur — GHH; major textile hub city",
+     11.1085, 77.3411, "Tamil Nadu", "Tiruppur", "nhp", 83),
+
+    ("Government Hospital Erode — NH-544",
+     "hospital", 2, "0424-2258236", None,
+     "Perundurai Road, Erode — NH-544 corridor",
+     11.3410, 77.7172, "Tamil Nadu", "Erode", "nhp", 82),
+
+    ("Government Hospital Thanjavur",
+     "hospital", 2, "04362-231812", None,
+     "Medical College Road, Thanjavur",
+     10.7870, 79.1378, "Tamil Nadu", "Thanjavur", "nhp", 82),
+
+    ("Government Hospital Dindigul",
+     "hospital", 2, "0451-2431600", None,
+     "Palani Road, Dindigul — NH-44 feeder",
+     10.3673, 77.9803, "Tamil Nadu", "Dindigul", "nhp", 81),
+
+    ("Government Hospital Nagercoil — NH-44 terminus",
+     "hospital", 2, "04652-232225", None,
+     "Hospital Road, Nagercoil — NH-44 southernmost city",
+     8.1770, 77.4344, "Tamil Nadu", "Kanyakumari", "nhp", 81),
+
+    ("Government Hospital Cuddalore — NH-32",
+     "hospital", 2, "04142-222494", None,
+     "Cuddalore Port Road — NH-32 east coast",
+     11.7447, 79.7689, "Tamil Nadu", "Cuddalore", "nhp", 80),
+
+    ("Government Hospital Kumbakonam — NH-67",
+     "hospital", 2, "0435-2401530", None,
+     "Kumbakonam — NH-67 delta corridor",
+     10.9615, 79.3845, "Tamil Nadu", "Thanjavur", "nhp", 80),
+
+    # KARNATAKA -- missing large towns
+    ("Government Hospital Davangere -- NH-48",
+     "hospital", 2, "08192-231377", None,
+     "P J Extension, Davangere -- NH-48 midpoint Karnataka",
+     14.4644, 75.9218, "Karnataka", "Davangere", "nhp", 81),
+
+    ("Government Hospital Bellary -- NH-150",
+     "hospital", 2, "08392-271250", None,
+     "Kappagal Road, Ballari -- NH-150 mining belt",
+     15.1394, 76.9214, "Karnataka", "Ballari", "nhp", 80),
+
+    ("Government Hospital Bidar -- NH-65",
+     "hospital", 2, "08482-226100", None,
+     "Udgir Road, Bidar -- NH-65 Hyderabad corridor",
+     17.9104, 77.5199, "Karnataka", "Bidar", "nhp", 80),
+
+    # ANDHRA PRADESH -- missing large towns
+    ("Government Hospital Kadapa -- NH-140",
+     "hospital", 2, "08562-222650", None,
+     "Cuddapah Road, Kadapa -- NH-140 Rayalaseema",
+     14.4673, 78.8242, "Andhra Pradesh", "YSR Kadapa", "nhp", 80),
+
+    ("Government Hospital Anantapur -- NH-44",
+     "hospital", 2, "08554-272050", None,
+     "Hindupur Road, Anantapur -- NH-44 AP corridor",
+     14.6819, 77.5991, "Andhra Pradesh", "Anantapur", "nhp", 80),
+
+    ("Government Hospital Ongole -- NH-16",
+     "hospital", 2, "08592-282350", None,
+     "Trunk Road, Ongole -- NH-16 East coast",
+     15.5057, 80.0499, "Andhra Pradesh", "Prakasam", "nhp", 79),
+
+    # TELANGANA -- missing large towns
+    ("Government Hospital Karimnagar -- NH-563",
+     "hospital", 2, "0878-2234551", None,
+     "Mankammathota, Karimnagar -- NH-563 Telangana north",
+     18.4386, 79.1288, "Telangana", "Karimnagar", "nhp", 80),
+
+    ("Government Hospital Khammam -- NH-163",
+     "hospital", 2, "08742-222310", None,
+     "Wyra Road, Khammam -- NH-163 corridor",
+     17.2473, 80.1514, "Telangana", "Khammam", "nhp", 79),
+
+    # MAHARASHTRA -- missing large towns
+    ("Government Hospital Ahmednagar -- NH-60",
+     "hospital", 2, "0241-2325500", None,
+     "Savedi Road, Ahmednagar -- NH-60",
+     19.0952, 74.7496, "Maharashtra", "Ahmednagar", "nhp", 80),
+
+    ("Government Hospital Latur -- NH-361",
+     "hospital", 2, "02382-252120", None,
+     "Station Road, Latur -- NH-361 Marathwada",
+     18.4088, 76.5604, "Maharashtra", "Latur", "nhp", 80),
+
+    ("Government Hospital Amravati -- NH-53",
+     "hospital", 2, "0721-2571255", None,
+     "Irwin Square, Amravati -- NH-53 Vidarbha",
+     20.9374, 77.7796, "Maharashtra", "Amravati", "nhp", 80),
+
+    # MADHYA PRADESH -- missing large towns
+    ("Government Hospital Ujjain -- NH-52",
+     "hospital", 2, "0734-2513211", None,
+     "Dewas Road, Ujjain -- NH-52 temple city corridor",
+     23.1765, 75.7885, "Madhya Pradesh", "Ujjain", "nhp", 80),
+
+    ("Government Hospital Sagar -- NH-44",
+     "hospital", 2, "07582-223200", None,
+     "Hospital Road, Sagar -- NH-44 central MP",
+     23.8388, 78.7378, "Madhya Pradesh", "Sagar", "nhp", 79),
+
+    ("Government Hospital Rewa -- NH-30",
+     "hospital", 2, "07662-233150", None,
+     "Rewa -- NH-30 Vindhya corridor",
+     24.5362, 81.2996, "Madhya Pradesh", "Rewa", "nhp", 79),
+
+    # RAJASTHAN -- missing large towns
+    ("Government Hospital Kota -- NH-52",
+     "hospital", 2, "0744-2450761", None,
+     "Hospital Road, Kota -- NH-52 Rajasthan industrial belt",
+     25.2138, 75.8648, "Rajasthan", "Kota", "nhp", 81),
+
+    ("Government Hospital Bikaner -- NH-15",
+     "hospital", 2, "0151-2523734", None,
+     "PBM Hospital, Bikaner -- NH-15 desert highway",
+     28.0229, 73.3119, "Rajasthan", "Bikaner", "nhp", 81),
+
+    ("Government Hospital Alwar -- NH-48",
+     "hospital", 2, "0144-2700354", None,
+     "Alwar -- NH-48 Delhi-Jaipur; accident-prone stretch",
+     27.5530, 76.6346, "Rajasthan", "Alwar", "nhp", 80),
+
+    # GUJARAT -- missing large towns
+    ("Government Hospital Bhavnagar -- NH-51",
+     "hospital", 2, "0278-2423000", None,
+     "Sir T Hospital, Bhavnagar -- NH-51",
+     21.7645, 72.1519, "Gujarat", "Bhavnagar", "nhp", 81),
+
+    ("Government Hospital Anand -- NH-48",
+     "hospital", 2, "02692-264251", None,
+     "Station Road, Anand -- NH-48 dairy belt",
+     22.5645, 72.9289, "Gujarat", "Anand", "nhp", 80),
+
+    # KERALA -- missing large towns
+    ("Government Hospital Kannur -- NH-66",
+     "hospital", 2, "0497-2705012", None,
+     "Pariyaram, Kannur -- NH-66 North Kerala",
+     11.8745, 75.3704, "Kerala", "Kannur", "nhp", 81),
+
+    ("Government Hospital Kollam -- NH-66",
+     "hospital", 2, "0474-2794596", None,
+     "Parippally, Kollam -- NH-66 south Kerala",
+     8.8932, 76.6141, "Kerala", "Kollam", "nhp", 81),
+
+    ("Government Hospital Kottayam -- NH-183",
+     "hospital", 2, "0481-2597211", None,
+     "Gandhinagar, Kottayam -- NH-183 rubber belt",
+     9.5916, 76.5222, "Kerala", "Kottayam", "nhp", 80),
+
+    # WEST BENGAL -- missing large towns
+    ("Government Hospital Siliguri -- NH-31",
+     "hospital", 2, "0353-2432230", None,
+     "Kanchenjunga Stadium Road, Siliguri -- NH-31 NE gateway",
+     26.7271, 88.3953, "West Bengal", "Darjeeling", "nhp", 81),
+
+    ("Government Hospital Asansol -- NH-19",
+     "hospital", 2, "0341-2303050", None,
+     "GT Road, Asansol -- NH-19 coal belt",
+     23.6889, 86.9661, "West Bengal", "Paschim Bardhaman", "nhp", 80),
+
+    # ODISHA -- missing large towns
+    ("Government Hospital Rourkela -- NH-143",
+     "hospital", 2, "0661-2520166", None,
+     "Rourkela Steel Plant Area -- NH-143 industrial corridor",
+     22.2604, 84.8536, "Odisha", "Sundargarh", "nhp", 80),
+
+    # BIHAR -- missing large towns
+    ("Government Hospital Muzaffarpur -- NH-57",
+     "hospital", 2, "0621-2242200", None,
+     "Mithanpura, Muzaffarpur -- NH-57 north Bihar",
+     26.1209, 85.3647, "Bihar", "Muzaffarpur", "nhp", 80),
+
+    ("Government Hospital Gaya -- NH-83",
+     "hospital", 2, "0631-2221200", None,
+     "Jail Road, Gaya -- NH-83 pilgrimage route",
+     24.7955, 85.0002, "Bihar", "Gaya", "nhp", 79),
+
+    # UTTAR PRADESH -- missing large towns
+    ("Government Hospital Meerut -- NH-58",
+     "hospital", 2, "0121-2760396", None,
+     "Garh Road, Meerut -- NH-58 Delhi-Haridwar",
+     28.9845, 77.7064, "Uttar Pradesh", "Meerut", "nhp", 81),
+
+    ("Government Hospital Bareilly -- NH-30",
+     "hospital", 2, "0581-2510460", None,
+     "Civil Lines, Bareilly -- NH-30 Rohilkhand",
+     28.3670, 79.4304, "Uttar Pradesh", "Bareilly", "nhp", 80),
+
+    ("Government Hospital Aligarh -- NH-91",
+     "hospital", 2, "0571-2700120", None,
+     "Dodhpur, Aligarh -- NH-91 Agra-Kanpur belt",
+     27.8974, 78.0880, "Uttar Pradesh", "Aligarh", "nhp", 80),
+
+    ("Government Hospital Gorakhpur -- NH-27",
+     "hospital", 2, "0551-2201505", None,
+     "Medical College Road, Gorakhpur -- NH-27/NH-29 junction",
+     26.7606, 83.3732, "Uttar Pradesh", "Gorakhpur", "nhp", 81),
+
+    # ASSAM + NORTHEAST -- key towns
+    ("Government Hospital Dibrugarh -- NH-37",
+     "hospital", 2, "0373-2322280", None,
+     "Barbari, Dibrugarh -- NH-37 upper Assam oil town",
+     27.4728, 94.9120, "Assam", "Dibrugarh", "nhp", 79),
+
+    ("Government Hospital Silchar -- NH-6",
+     "hospital", 2, "03842-231530", None,
+     "Ghungoor, Silchar -- NH-6 Barak Valley gateway",
+     24.8333, 92.7789, "Assam", "Cachar", "nhp", 79),
+
+    ("Government Hospital Imphal -- NH-2",
+     "hospital", 2, "0385-2451036", None,
+     "Paona Bazar, Imphal -- NH-2 Manipur capital",
+     24.8170, 93.9368, "Manipur", "Imphal West", "nhp", 79),
 ]
 
 
@@ -374,7 +598,7 @@ def seed_specialty_hospitals(conn):
     Skips duplicates by name + district.
     Categories used:
       specialty_hospital, burn_centre, neuro_spinal,
-      paediatric_trauma, trauma, ortho_trauma
+      paediatric_trauma, trauma, ortho_trauma, hospital
     """
     cur = conn.cursor()
     inserted = 0
@@ -402,8 +626,8 @@ def seed_specialty_hospitals(conn):
 
     conn.commit()
     print(f"[Specialty] Seeded {inserted} specialised hospitals "
-          f"({skipped} already existed) — "
-          f"AIIMS network, burn centres, neuro/spinal, paediatric, ortho")
+          f"({skipped} already existed) -- "
+          f"AIIMS network, burn centres, neuro/spinal, paediatric, ortho, major towns")
     return inserted
 
 
