@@ -1172,7 +1172,8 @@ st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
 st.subheader("🩺 First Aid & Golden Hour Guide")
 st.caption("Works fully offline · WHO · Indian Red Cross · MoRTH guidelines")
 _intent_for_aid = st.session_state.get("last_intent", None)
-render_first_aid(user_msg=user_msg, intent=_intent_for_aid)
+render_first_aid(user_msg=user_msg, intent=_intent_for_aid,
+                 lang=st.session_state.get("ui_lang", "en"))
 
 # Footer
 st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
