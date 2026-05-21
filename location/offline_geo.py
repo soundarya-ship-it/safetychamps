@@ -19,6 +19,14 @@ CITIES = {
     "ranipet": (12.9278, 79.3327), "thanjavur": (10.7870, 79.1378),
     "dindigul": (10.3624, 77.9695), "cuddalore": (11.7480, 79.7714),
     "kumbakonam": (10.9617, 79.3788), "nagercoil": (8.1833, 77.4119),
+    "tiruppur": (11.1085, 77.3411), "tirupur": (11.1085, 77.3411),
+    "ooty": (11.4102, 76.6950), "pollachi": (10.6575, 77.0079),
+    "karur": (10.9601, 78.0766), "namakkal": (11.2190, 78.1675),
+    "sivakasi": (9.4533, 77.7979), "virudhunagar": (9.5810, 77.9624),
+    "thoothukudi": (8.7642, 78.1348), "tuticorin": (8.7642, 78.1348),
+    "ramanathapuram": (9.3762, 78.8309), "pudukkottai": (10.3833, 78.8200),
+    "nagapattinam": (10.7631, 79.8426), "villupuram": (11.9401, 79.4929),
+    "chengalpattu": (12.6923, 79.9771), "tambaram": (12.9215, 80.1153),
 
     # Karnataka
     "bangalore": (12.9716, 77.5946), "bengaluru": (12.9716, 77.5946),

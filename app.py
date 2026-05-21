@@ -582,24 +582,32 @@ params = st.query_params
 auto_lat = float(params["lat"]) if "lat" in params else 0.0
 auto_lon = float(params["lon"]) if "lon" in params else 0.0
 
-# st.components.v1.html is needed here for JS geolocation — no pure-Streamlit alternative.
-# Deprecation warning is cosmetic; removal scheduled post June 2026 (after hackathon deadline).
 st.components.v1.html("""
 <style>
 #gps-btn {
-    background: #1d4ed8; color: white; border: none;
-    padding: 14px 20px; border-radius: 10px; font-size: 16px;
-    font-weight: 700; width: 100%; cursor: pointer; margin-bottom: 6px;
+    background:#1d4ed8;color:white;border:none;
+    padding:14px 20px;border-radius:10px;font-size:16px;
+    font-weight:700;width:100%;cursor:pointer;margin-bottom:6px;
 }
-#gps-btn:active { background: #1e40af; }
-#gps-status { font-size: 13px; color: #555; text-align: center; min-height: 20px; }
+#gps-btn:active{background:#1e40af;}
+#gps-status{font-size:13px;color:#555;text-align:center;min-height:20px;}
+#gps-coords{font-size:13px;color:#1d4ed8;text-align:center;margin-top:4px;font-weight:600;}
 </style>
 <button id="gps-btn" onclick="getGPS()">Use My Phone Location (GPS)</button>
 <div id="gps-status">Tap above to auto-fill your coordinates</div>
+<div id="gps-coords"></div>
 <script>
+function tryNav(url) {
+    var tried = false;
+    try { window.top.location.href = url; tried = true; } catch(e) {}
+    if (!tried) try { window.parent.location.href = url; tried = true; } catch(e) {}
+    if (!tried) try { window.location.href = url; tried = true; } catch(e) {}
+    return tried;
+}
 function getGPS() {
     var btn = document.getElementById('gps-btn');
     var status = document.getElementById('gps-status');
+    var coords = document.getElementById('gps-coords');
     btn.disabled = true;
     btn.textContent = 'Getting location...';
     status.textContent = 'Requesting GPS — please allow location access';
@@ -613,21 +621,26 @@ function getGPS() {
             var lat = pos.coords.latitude.toFixed(5);
             var lon = pos.coords.longitude.toFixed(5);
             var acc = Math.round(pos.coords.accuracy);
-            status.textContent = 'Location found! Accuracy: ' + acc + ' metres';
-            btn.textContent = 'Location found';
-            window.parent.location.href =
-                window.parent.location.pathname + '?lat=' + lat + '&lon=' + lon;
+            btn.textContent = 'Location found!';
+            status.textContent = 'Accuracy: ' + acc + ' m — loading...';
+            var url = window.top.location.pathname + '?lat=' + lat + '&lon=' + lon;
+            var ok = tryNav(url);
+            if (!ok) {
+                status.textContent = 'GPS got: ' + lat + ', ' + lon + ' (acc ' + acc + 'm)';
+                coords.innerHTML = 'Enter manually below: <b>Lat ' + lat + ' | Lon ' + lon + '</b>';
+            }
         },
         function(err) {
-            var msgs = {1:'Permission denied', 2:'Position unavailable', 3:'Timeout'};
-            status.textContent = 'GPS error: ' + (msgs[err.code] || err.message);
+            var msgs = {1:'Permission denied — tap the lock icon in browser',
+                        2:'Position unavailable', 3:'Timeout — try again'};
+            status.textContent = 'GPS: ' + (msgs[err.code] || err.message);
             btn.disabled = false; btn.textContent = 'Use My Phone Location (GPS)';
         },
-        {enableHighAccuracy: true, timeout: 12000, maximumAge: 30000}
+        {enableHighAccuracy:true, timeout:15000, maximumAge:30000}
     );
 }
 </script>
-""", height=90)
+""", height=110)
 
 if auto_lat != 0.0 and auto_lon != 0.0:
     st.success(f"GPS location captured: {auto_lat:.4f}, {auto_lon:.4f}")
