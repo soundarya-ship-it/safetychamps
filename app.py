@@ -473,9 +473,11 @@ with col_h1:
     st.markdown("## 🚨 RoadSoS Buddy")
     st.caption("by Safety Champs  |  " + T["tagline"])
 with col_h2:
-    if os.path.exists(DB_PATH):
+    try:
         n = sqlite3.connect(DB_PATH).execute("SELECT COUNT(*) FROM contacts WHERE is_active=1").fetchone()[0]
         st.metric(T["metric_label"], n)
+    except Exception:
+        pass  # DB not ready yet — metric hidden until init completes
 
 
 # ── SOS BUTTON ───────────────────────────────────────────────────────────────
