@@ -28,7 +28,7 @@ T = get_T()
 
 # ── Page config (must be first Streamlit call) ────────────────────────────────
 st.set_page_config(
-    page_title="RoadSoS",
+    page_title="RoadSoS Buddy by Safety Champs",
     page_icon="🚨",
     layout="centered",
     initial_sidebar_state="collapsed",
@@ -407,8 +407,8 @@ hr { margin: 0.5rem 0 !important; }
 # ── Header ────────────────────────────────────────────────────────────────────
 col_h1, col_h2 = st.columns([3,1])
 with col_h1:
-    st.markdown("# 🚨 RoadSoS")
-    st.caption(T["tagline"])
+    st.markdown("# 🚨 RoadSoS Buddy")
+    st.caption("by Safety Champs  |  " + T["tagline"])
 with col_h2:
     if os.path.exists(DB_PATH):
         n = sqlite3.connect(DB_PATH).execute("SELECT COUNT(*) FROM contacts WHERE is_active=1").fetchone()[0]
@@ -521,8 +521,9 @@ with st.sidebar:
         st.markdown(f"`{n['phone']}` — {n['name']}")
 
     st.divider()
-    st.caption("Built for IIT Madras Road Safety Hackathon 2026")
-    st.caption("Team: Soundarya · Shreya · Ashwin")
+    st.caption("RoadSoS Buddy by Safety Champs")
+    st.caption("IIT Madras Road Safety Hackathon 2026")
+    st.caption("Soundarya · Shreya · Ashwin")
 
 # ── Input section ─────────────────────────────────────────────────────────────
 st.subheader("📍 " + T["input_header"])
