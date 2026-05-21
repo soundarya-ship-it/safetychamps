@@ -959,98 +959,7 @@ if auto_lon != 0.0 and gps_lon == 0.0:
 
 go = st.button("🔍 Find Emergency Help Near Me", type="primary", use_container_width=True)
 
-st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
-
-# ── ALWAYS show Tier 1 numbers ────────────────────────────────────────────────
-st.subheader("✅ " + T["tier1_header"])
-st.caption(T["tier1_caption"])
-
-t1_cols = st.columns(4)
-for i, n in enumerate(INDIA_NATIONAL[:4]):
-    with t1_cols[i]:
-        icon = CATEGORY_ICONS.get(n["category"], "📞")
-        short = n.get("short", "")
-        st.markdown(f"""
-        <div class="tier1">
-          <div class="num">{n['phone']}</div>
-          <div class="lbl">{icon} {n['name']}</div>
-          {f'<div class="sub">{short}</div>' if short else ''}
-        </div>""", unsafe_allow_html=True)
-
-# ── International Emergency Numbers ──────────────────────────────────────────
-st.subheader("🌍 International Emergency Numbers")
-_all_countries = load_country_numbers()
-st.caption(f"Instant reference for {len(_all_countries)} countries — works fully offline")
-
-_search_col, _info_col = st.columns([3, 1])
-with _search_col:
-    _country_search = st.text_input(
-        "Search country", placeholder="e.g. Germany, Japan, UAE...",
-        label_visibility="collapsed", key="country_search"
-    )
-with _info_col:
-    st.markdown(
-        f'<div style="background:#1D4ED8;color:#FFFFFF;border-radius:8px;'
-        f'padding:6px 12px;text-align:center;font-weight:600;font-size:14px;'
-        f'font-family:system-ui,sans-serif">'
-        f'{len(_all_countries)} Countries</div>',
-        unsafe_allow_html=True
-    )
-
-_filtered = [
-    c for c in _all_countries
-    if not _country_search or _country_search.lower() in c["name"].lower()
-       or _country_search.upper() in c["cc"]
-]
-
-if _filtered:
-    def _country_card_html(c):
-        emerg  = c.get("emergency") or c.get("ambulance") or "—"
-        police = c.get("police") or "—"
-        amb    = c.get("ambulance") or "—"
-        fire   = c.get("fire") or "—"
-        cc     = c["cc"].upper()
-        name   = c["name"]
-        return (
-            f'<div style="border:1px solid #E2E8F0;border-radius:10px;'
-            f'padding:10px 12px;margin:3px 0;background:#F8FAFC;min-height:90px;'
-            f'font-family:system-ui,sans-serif">'
-            f'<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">'
-            f'<span style="background:#1E3A5F;color:#FFFFFF;font-size:10px;font-weight:600;'
-            f'padding:2px 6px;border-radius:4px;letter-spacing:0.8px">{cc}</span>'
-            f'<span style="font-size:14px;font-weight:600;color:#111827">{name}</span>'
-            f'</div>'
-            f'<div style="font-size:26px;font-weight:800;color:#DC2626;'
-            f'letter-spacing:1px;margin:4px 0;line-height:1.1">{emerg}</div>'
-            f'<div style="font-size:12px;color:#4B5563;line-height:1.8">'
-            f'🚔&nbsp;{police}&nbsp;&nbsp;🚑&nbsp;{amb}&nbsp;&nbsp;🚒&nbsp;{fire}</div>'
-            f'</div>'
-        )
-
-    # Show first 12 as cards; rest inside expander
-    _show_limit = 12 if not _country_search else len(_filtered)
-    _display = _filtered[:_show_limit]
-    _cols_per_row = 3
-    for _row_start in range(0, len(_display), _cols_per_row):
-        _row = _display[_row_start:_row_start + _cols_per_row]
-        _rcols = st.columns(_cols_per_row)
-        for _ci, _c in enumerate(_row):
-            with _rcols[_ci]:
-                st.markdown(_country_card_html(_c), unsafe_allow_html=True)
-
-    if not _country_search and len(_filtered) > _show_limit:
-        with st.expander(f"Show all {len(_filtered)} countries"):
-            _rest = _filtered[_show_limit:]
-            for _row_start in range(0, len(_rest), _cols_per_row):
-                _row = _rest[_row_start:_row_start + _cols_per_row]
-                _rcols = st.columns(_cols_per_row)
-                for _ci, _c in enumerate(_row):
-                    with _rcols[_ci]:
-                        st.markdown(_country_card_html(_c), unsafe_allow_html=True)
-else:
-    st.info(f"No country found matching '{_country_search}'")
-
-st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
+st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
 # ── Results ───────────────────────────────────────────────────────────────────
 if go and (user_msg or (gps_lat != 0.0 and gps_lon != 0.0)):
@@ -1368,6 +1277,95 @@ if go and (user_msg or (gps_lat != 0.0 and gps_lon != 0.0)):
 
 elif go:
     st.warning(T["no_input"])
+
+# ── ALWAYS show Tier 1 numbers ────────────────────────────────────────────────
+st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
+st.subheader("✅ " + T["tier1_header"])
+st.caption(T["tier1_caption"])
+
+t1_cols = st.columns(4)
+for i, n in enumerate(INDIA_NATIONAL[:4]):
+    with t1_cols[i]:
+        icon = CATEGORY_ICONS.get(n["category"], "📞")
+        short = n.get("short", "")
+        st.markdown(f"""
+        <div class="tier1">
+          <div class="num">{n['phone']}</div>
+          <div class="lbl">{icon} {n['name']}</div>
+          {f'<div class="sub">{short}</div>' if short else ''}
+        </div>""", unsafe_allow_html=True)
+
+# ── International Emergency Numbers ──────────────────────────────────────────
+st.subheader("🌍 International Emergency Numbers")
+_all_countries = load_country_numbers()
+st.caption(f"Instant reference for {len(_all_countries)} countries — works fully offline")
+
+_search_col, _info_col = st.columns([3, 1])
+with _search_col:
+    _country_search = st.text_input(
+        "Search country", placeholder="e.g. Germany, Japan, UAE...",
+        label_visibility="collapsed", key="country_search"
+    )
+with _info_col:
+    st.markdown(
+        f'<div style="background:#1D4ED8;color:#FFFFFF;border-radius:8px;'
+        f'padding:6px 12px;text-align:center;font-weight:600;font-size:14px;'
+        f'font-family:system-ui,sans-serif">'
+        f'{len(_all_countries)} Countries</div>',
+        unsafe_allow_html=True
+    )
+
+_filtered = [
+    c for c in _all_countries
+    if not _country_search or _country_search.lower() in c["name"].lower()
+       or _country_search.upper() in c["cc"]
+]
+
+if _filtered:
+    def _country_card_html(c):
+        emerg  = c.get("emergency") or c.get("ambulance") or "—"
+        police = c.get("police") or "—"
+        amb    = c.get("ambulance") or "—"
+        fire   = c.get("fire") or "—"
+        cc     = c["cc"].upper()
+        name   = c["name"]
+        return (
+            f'<div style="border:1px solid #E2E8F0;border-radius:10px;'
+            f'padding:10px 12px;margin:3px 0;background:#F8FAFC;min-height:90px;'
+            f'font-family:system-ui,sans-serif">'
+            f'<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">'
+            f'<span style="background:#1E3A5F;color:#FFFFFF;font-size:10px;font-weight:600;'
+            f'padding:2px 6px;border-radius:4px;letter-spacing:0.8px">{cc}</span>'
+            f'<span style="font-size:14px;font-weight:600;color:#111827">{name}</span>'
+            f'</div>'
+            f'<div style="font-size:26px;font-weight:800;color:#DC2626;'
+            f'letter-spacing:1px;margin:4px 0;line-height:1.1">{emerg}</div>'
+            f'<div style="font-size:12px;color:#4B5563;line-height:1.8">'
+            f'🚔&nbsp;{police}&nbsp;&nbsp;🚑&nbsp;{amb}&nbsp;&nbsp;🚒&nbsp;{fire}</div>'
+            f'</div>'
+        )
+
+    _show_limit = 12 if not _country_search else len(_filtered)
+    _display = _filtered[:_show_limit]
+    _cols_per_row = 3
+    for _row_start in range(0, len(_display), _cols_per_row):
+        _row = _display[_row_start:_row_start + _cols_per_row]
+        _rcols = st.columns(_cols_per_row)
+        for _ci, _c in enumerate(_row):
+            with _rcols[_ci]:
+                st.markdown(_country_card_html(_c), unsafe_allow_html=True)
+
+    if not _country_search and len(_filtered) > _show_limit:
+        with st.expander(f"Show all {len(_filtered)} countries"):
+            _rest = _filtered[_show_limit:]
+            for _row_start in range(0, len(_rest), _cols_per_row):
+                _row = _rest[_row_start:_row_start + _cols_per_row]
+                _rcols = st.columns(_cols_per_row)
+                for _ci, _c in enumerate(_row):
+                    with _rcols[_ci]:
+                        st.markdown(_country_card_html(_c), unsafe_allow_html=True)
+else:
+    st.info(f"No country found matching '{_country_search}'")
 
 # ── First Aid — ALWAYS VISIBLE (works offline, no search needed) ─────────────
 st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
