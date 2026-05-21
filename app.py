@@ -482,7 +482,7 @@ st.markdown("""
 
 /* ── Layout ── */
 .block-container {
-  padding-top: 0.5rem !important;
+  padding-top: 3rem !important;
   padding-left: 1rem !important;
   padding-right: 1rem !important;
   max-width: 900px;
@@ -633,18 +633,11 @@ except Exception:
 
 _hcol1, _hcol2 = st.columns([3, 1])
 with _hcol1:
-    st.markdown(
-        f'<div style="padding:6px 0 2px 0">'
-        f'<div style="font-size:26px;font-weight:800;color:#111827;line-height:1.1;'
-        f'font-family:system-ui,sans-serif">🚨 RoadSoS Buddy</div>'
-        f'<div style="font-size:13px;color:#4B5563;margin-top:5px;'
-        f'font-family:system-ui,sans-serif">by Safety Champs &nbsp;·&nbsp; {T["tagline"]}</div>'
-        f'</div>',
-        unsafe_allow_html=True
-    )
+    st.markdown("## 🚨 RoadSoS Buddy")
+    st.caption(f"by Safety Champs · {T['tagline']}")
 with _hcol2:
     st.markdown(
-        f'<div style="text-align:right;padding-top:6px;font-family:system-ui,sans-serif">'
+        f'<div style="text-align:right;padding-top:4px;font-family:system-ui,sans-serif">'
         f'<div style="font-size:24px;font-weight:800;color:#064E3B;line-height:1">'
         f'{_n_contacts if _n_contacts else "–"}</div>'
         f'<div style="font-size:11px;color:#9CA3AF;line-height:1.5;margin-top:2px">'
