@@ -62,17 +62,24 @@ def _auto_init_db():
     """Auto-initialise DB on first run (needed for Streamlit Cloud)."""
     if not os.path.exists(DB_PATH):
         try:
-            init_script = os.path.join(os.path.dirname(__file__), "database", "init_db.py")
-            if os.path.exists(init_script):
-                exec(open(init_script).read(), {"__file__": init_script})
-            # Run number verification after seeding
-            try:
-                from database.verify_numbers import verify_all_contacts
-                verify_all_contacts(DB_PATH)
-            except Exception:
-                pass
-        except Exception as e:
+            from database.init_db import (
+                init_db as _init_db,
+                seed_national_numbers,
+                seed_tier2_contacts,
+                seed_roadside_services,
+            )
+            _conn = _init_db()
+            seed_national_numbers(_conn)
+            seed_tier2_contacts(_conn)
+            seed_roadside_services(_conn)
+            _conn.close()
+        except Exception:
             pass  # App still works without DB (Tier 1 numbers always shown)
+        try:
+            from database.verify_numbers import verify_all_contacts
+            verify_all_contacts(DB_PATH)
+        except Exception:
+            pass
 
 _auto_init_db()
 
