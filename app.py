@@ -91,6 +91,48 @@ INDIA_NATIONAL = [
     {"name": "Women Helpline",                                 "phone": "1091", "tier": 1, "category": "helpline",          "confidence": 100, "highway": True},
 ]
 
+
+def _flag(cc):
+    """Convert ISO alpha-2 country code to flag emoji."""
+    try:
+        return chr(0x1F1E6 + ord(cc[0]) - 65) + chr(0x1F1E6 + ord(cc[1]) - 65)
+    except Exception:
+        return ""
+
+
+@st.cache_data(ttl=3600)
+def load_country_numbers():
+    """Load all national_numbers rows from DB. Falls back to hardcoded list if DB missing."""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        rows = conn.execute(
+            "SELECT country_code, country_name, police, ambulance, fire, emergency, notes "
+            "FROM national_numbers ORDER BY country_name"
+        ).fetchall()
+        conn.close()
+        if rows:
+            return [
+                {"cc": r[0], "name": r[1], "police": r[2], "ambulance": r[3],
+                 "fire": r[4], "emergency": r[5], "notes": r[6]}
+                for r in rows
+            ]
+    except Exception:
+        pass
+    # Hardcoded fallback (key countries) in case DB not ready
+    return [
+        {"cc":"IN","name":"India",        "police":"100","ambulance":"108","fire":"101","emergency":"112","notes":"108=NHM ambulance; 1033=NHAI"},
+        {"cc":"US","name":"USA",          "police":"911","ambulance":"911","fire":"911","emergency":"911","notes":None},
+        {"cc":"GB","name":"UK",           "police":"999","ambulance":"999","fire":"999","emergency":"999","notes":None},
+        {"cc":"AU","name":"Australia",    "police":"000","ambulance":"000","fire":"000","emergency":"000","notes":None},
+        {"cc":"AE","name":"UAE",          "police":"999","ambulance":"998","fire":"997","emergency":"999","notes":None},
+        {"cc":"SG","name":"Singapore",    "police":"999","ambulance":"995","fire":"995","emergency":"999","notes":None},
+        {"cc":"DE","name":"Germany",      "police":"110","ambulance":"112","fire":"112","emergency":"112","notes":None},
+        {"cc":"FR","name":"France",       "police":"17", "ambulance":"15", "fire":"18", "emergency":"112","notes":None},
+        {"cc":"JP","name":"Japan",        "police":"110","ambulance":"119","fire":"119","emergency":"110","notes":None},
+        {"cc":"CN","name":"China",        "police":"110","ambulance":"120","fire":"119","emergency":"110","notes":None},
+    ]
+
+
 CATEGORY_ICONS = {
     "hospital": "🏥", "ambulance": "🚑", "police": "🚔",
     "towing": "🚛",   "puncture": "🔧", "pharmacy": "💊",
@@ -634,6 +676,90 @@ for i, n in enumerate(INDIA_NATIONAL[:4]):
           <div class="num">{n['phone']}</div>
           <div class="lbl">{icon} {n['name']}</div>
         </div>""", unsafe_allow_html=True)
+
+# ── International Emergency Numbers ──────────────────────────────────────────
+st.subheader("🌍 International Emergency Numbers")
+_all_countries = load_country_numbers()
+st.caption(f"Instant reference for {len(_all_countries)} countries — works fully offline")
+
+_search_col, _info_col = st.columns([3, 1])
+with _search_col:
+    _country_search = st.text_input(
+        "Search country", placeholder="e.g. Germany, Japan, UAE...",
+        label_visibility="collapsed", key="country_search"
+    )
+with _info_col:
+    st.markdown(
+        f'<div style="background:#1d4ed8;color:#fff;border-radius:8px;'
+        f'padding:6px 12px;text-align:center;font-weight:700;font-size:14px">'
+        f'{len(_all_countries)} Countries</div>',
+        unsafe_allow_html=True
+    )
+
+_filtered = [
+    c for c in _all_countries
+    if not _country_search or _country_search.lower() in c["name"].lower()
+       or _country_search.upper() in c["cc"]
+]
+
+if _filtered:
+    # Show first 12 as cards; rest inside expander
+    _show_limit = 12 if not _country_search else len(_filtered)
+    _display = _filtered[:_show_limit]
+    _cols_per_row = 3
+    for _row_start in range(0, len(_display), _cols_per_row):
+        _row = _display[_row_start:_row_start + _cols_per_row]
+        _rcols = st.columns(_cols_per_row)
+        for _ci, _c in enumerate(_row):
+            with _rcols[_ci]:
+                _emerg = _c.get("emergency") or _c.get("ambulance") or "—"
+                _police = _c.get("police") or "—"
+                _amb    = _c.get("ambulance") or "—"
+                _fire   = _c.get("fire") or "—"
+                _flag_em = _flag(_c["cc"])
+                st.markdown(
+                    f'<div style="border:1px solid #e2e8f0;border-radius:10px;'
+                    f'padding:10px 12px;margin:3px 0;background:#f8fafc">'
+                    f'<div style="font-size:18px;font-weight:800;line-height:1.1">'
+                    f'{_flag_em} {_c["name"]}</div>'
+                    f'<div style="font-size:22px;font-weight:900;color:#dc2626;'
+                    f'letter-spacing:1px;margin:4px 0">{_emerg}</div>'
+                    f'<div style="font-size:11px;color:#64748b;line-height:1.6">'
+                    f'Police&nbsp;{_police} &nbsp;|&nbsp; '
+                    f'Amb&nbsp;{_amb} &nbsp;|&nbsp; '
+                    f'Fire&nbsp;{_fire}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+    if not _country_search and len(_filtered) > _show_limit:
+        with st.expander(f"Show all {len(_filtered)} countries"):
+            _rest = _filtered[_show_limit:]
+            for _row_start in range(0, len(_rest), _cols_per_row):
+                _row = _rest[_row_start:_row_start + _cols_per_row]
+                _rcols = st.columns(_cols_per_row)
+                for _ci, _c in enumerate(_row):
+                    with _rcols[_ci]:
+                        _emerg = _c.get("emergency") or _c.get("ambulance") or "—"
+                        _police = _c.get("police") or "—"
+                        _amb    = _c.get("ambulance") or "—"
+                        _fire   = _c.get("fire") or "—"
+                        _flag_em = _flag(_c["cc"])
+                        st.markdown(
+                            f'<div style="border:1px solid #e2e8f0;border-radius:10px;'
+                            f'padding:10px 12px;margin:3px 0;background:#f8fafc">'
+                            f'<div style="font-size:18px;font-weight:800;line-height:1.1">'
+                            f'{_flag_em} {_c["name"]}</div>'
+                            f'<div style="font-size:22px;font-weight:900;color:#dc2626;'
+                            f'letter-spacing:1px;margin:4px 0">{_emerg}</div>'
+                            f'<div style="font-size:11px;color:#64748b;line-height:1.6">'
+                            f'Police&nbsp;{_police} &nbsp;|&nbsp; '
+                            f'Amb&nbsp;{_amb} &nbsp;|&nbsp; '
+                            f'Fire&nbsp;{_fire}</div>'
+                            f'</div>',
+                            unsafe_allow_html=True
+                        )
+else:
+    st.info(f"No country found matching '{_country_search}'")
 
 st.divider()
 
