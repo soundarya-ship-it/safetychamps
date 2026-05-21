@@ -574,6 +574,24 @@ with st.sidebar:
     st.caption("IIT Madras Road Safety Hackathon 2026")
     st.caption("Soundarya · Shreya · Ashwin")
 
+# ── Language selector — visible on main page ──────────────────────────────────
+_lang_col, _ = st.columns([2, 3])
+with _lang_col:
+    _lang_codes = list(LANG_OPTIONS.keys())
+    _lang_idx = _lang_codes.index(st.session_state.get("ui_lang", "en"))
+    _chosen = st.selectbox(
+        "🌐 Language / भाषा / மொழி",
+        options=_lang_codes,
+        format_func=lambda x: LANG_OPTIONS[x],
+        index=_lang_idx,
+        key="lang_main",
+        label_visibility="collapsed",
+    )
+    if _chosen != st.session_state.get("ui_lang"):
+        st.session_state.ui_lang = _chosen
+        T = get_T()
+        st.rerun()
+
 # ── Input section ─────────────────────────────────────────────────────────────
 st.subheader("📍 " + T["input_header"])
 
@@ -777,6 +795,7 @@ if go and (user_msg or (gps_lat != 0.0 and gps_lon != 0.0)):
     # 1. Parse intent
     with st.spinner(T["spinner_intent"]):
         intent = parse_intent_groq(user_msg or "emergency", _get_secret("GROQ_API_KEY"))
+    st.session_state.last_intent = intent
 
     # Auto-detect language from script and switch UI if needed
     if user_msg:
@@ -948,11 +967,7 @@ if go and (user_msg or (gps_lat != 0.0 and gps_lon != 0.0)):
         else:
             st.info(T["no_contacts"])
 
-    # 7. First Aid / Golden Hour Guidance
-    st.divider()
-    render_first_aid(user_msg=user_msg, intent=intent)
-
-    # 8. Share
+    # 7. Share
     st.divider()
     st.subheader("Share: " + T["share_header"])
     contacts_for_share = (db_contacts + osm_contacts)[:3]
@@ -977,6 +992,13 @@ if go and (user_msg or (gps_lat != 0.0 and gps_lon != 0.0)):
 
 elif go:
     st.warning(T["no_input"])
+
+# ── First Aid — ALWAYS VISIBLE (works offline, no search needed) ─────────────
+st.divider()
+st.subheader("🩺 First Aid & Golden Hour Guide")
+st.caption("Works fully offline · Based on WHO, Indian Red Cross & MoRTH guidelines")
+_intent_for_aid = st.session_state.get("last_intent", None)
+render_first_aid(user_msg=user_msg, intent=_intent_for_aid)
 
 # Footer
 st.divider()
