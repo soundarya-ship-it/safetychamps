@@ -1,0 +1,23 @@
+# Environment
+.env
+*.env
+
+# Database (regenerated on deploy)
+roadsos.db
+roadsos.db-journal
+*.db-journal
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+
+# VS Code
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
