@@ -140,7 +140,7 @@ def load_country_numbers():
         conn = sqlite3.connect(DB_PATH)
         rows = conn.execute(
             "SELECT country_code, country_name, police, ambulance, fire, emergency, notes "
-            "FROM national_numbers ORDER BY country_name"
+            "FROM national_numbers GROUP BY country_code ORDER BY country_name"
         ).fetchall()
         conn.close()
         if rows:
