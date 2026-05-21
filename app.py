@@ -28,6 +28,11 @@ except Exception:
 
 if "ui_lang" not in st.session_state:
     st.session_state.ui_lang = "en"
+# Pre-seed both widget keys so Streamlit never sees index= conflict
+if "lang_main" not in st.session_state:
+    st.session_state["lang_main"] = st.session_state.ui_lang
+if "lang_select" not in st.session_state:
+    st.session_state["lang_select"] = st.session_state.ui_lang
 
 def get_T():
     return STRINGS[st.session_state.get("ui_lang", "en")]
@@ -671,14 +676,12 @@ with _hcol1:
     st.markdown("## 🚨 RoadSoS Buddy")
     st.caption("by Safety Champs · India emergency assistant")
 with _hcol2:
-    # ── Language selector — lives here so it's always visible ──
+    # ── Language selector — session state drives value, no index= needed ──
     _lang_codes = list(LANG_OPTIONS.keys())
-    _lang_idx = _lang_codes.index(st.session_state.get("ui_lang", "en"))
     _chosen = st.selectbox(
         "🌐",
         options=_lang_codes,
         format_func=lambda x: LANG_OPTIONS[x],
-        index=_lang_idx,
         key="lang_main",
         label_visibility="collapsed",
         help="Change language / भाषा बदलें / மொழி மாற்று",
@@ -718,14 +721,12 @@ st.html("""
 with st.sidebar:
     st.header("⚙️ " + T["sidebar_settings"])
 
-    # Language selector — manual override
+    # Language selector — session state drives value, no index= needed
     lang_codes = list(LANG_OPTIONS.keys())
-    current_idx = lang_codes.index(st.session_state.get("ui_lang", "en"))
     chosen_lang = st.selectbox(
         T["lang_label"],
         options=lang_codes,
         format_func=lambda x: LANG_OPTIONS[x],
-        index=current_idx,
         key="lang_select",
     )
     if chosen_lang != st.session_state.get("ui_lang"):
