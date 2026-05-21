@@ -108,14 +108,14 @@ _init_db_once()
 # ══════════════════════════════════════════════════════════════════════════════
 
 INDIA_NATIONAL = [
-    {"name": "National Emergency (Police + Ambulance + Fire)", "phone": "112",  "tier": 1, "category": "emergency",         "confidence": 100, "highway": True},
-    {"name": "Ambulance — NHM (29 states)",                   "phone": "108",  "tier": 1, "category": "ambulance",         "confidence": 100, "highway": True},
-    {"name": "NHAI Highway Helpline 24×7",                    "phone": "1033", "tier": 1, "category": "highway_helpline",  "confidence": 100, "highway": True},
-    {"name": "MoRTH Road Accident Emergency",                 "phone": "1073", "tier": 1, "category": "emergency",         "confidence": 100, "highway": True},
-    {"name": "Police",                                         "phone": "100",  "tier": 1, "category": "police",            "confidence": 100, "highway": True},
-    {"name": "Disaster Management Helpline",                  "phone": "1078", "tier": 1, "category": "disaster",          "confidence": 100, "highway": True},
-    {"name": "Fire & Rescue",                                  "phone": "101",  "tier": 1, "category": "fire",              "confidence": 100, "highway": False},
-    {"name": "Women Helpline",                                 "phone": "1091", "tier": 1, "category": "helpline",          "confidence": 100, "highway": True},
+    {"name": "Emergency", "short": "Police·Ambulance·Fire", "phone": "112",  "tier": 1, "category": "emergency",         "confidence": 100, "highway": True},
+    {"name": "Ambulance", "short": "NHM · 29 states",      "phone": "108",  "tier": 1, "category": "ambulance",         "confidence": 100, "highway": True},
+    {"name": "Highway",   "short": "NHAI 24×7",             "phone": "1033", "tier": 1, "category": "highway_helpline",  "confidence": 100, "highway": True},
+    {"name": "Road Acc.", "short": "MoRTH",                 "phone": "1073", "tier": 1, "category": "emergency",         "confidence": 100, "highway": True},
+    {"name": "Police",    "short": "",                       "phone": "100",  "tier": 1, "category": "police",            "confidence": 100, "highway": True},
+    {"name": "Disaster",  "short": "Helpline",               "phone": "1078", "tier": 1, "category": "disaster",          "confidence": 100, "highway": True},
+    {"name": "Fire",      "short": "& Rescue",               "phone": "101",  "tier": 1, "category": "fire",              "confidence": 100, "highway": False},
+    {"name": "Women",     "short": "Helpline",               "phone": "1091", "tier": 1, "category": "helpline",          "confidence": 100, "highway": True},
 ]
 
 
@@ -422,9 +422,10 @@ st.markdown("""
 .block-container{padding-top:0.5rem !important; padding-left:1rem !important; padding-right:1rem !important; max-width:900px}
 
 /* ── Tier 1 emergency numbers ── */
-.tier1{background:#064e3b;color:white;border-radius:10px;padding:14px 10px;margin:4px 0;text-align:center;cursor:pointer}
-.tier1 .num{font-size:32px;font-weight:800;letter-spacing:3px}
-.tier1 .lbl{font-size:11px;opacity:.85;margin-top:4px;line-height:1.3}
+.tier1{background:#064e3b;color:white;border-radius:10px;padding:12px 8px;margin:4px 0;text-align:center;cursor:pointer}
+.tier1 .num{font-size:34px;font-weight:900;letter-spacing:2px;line-height:1.1}
+.tier1 .lbl{font-size:12px;font-weight:700;opacity:.95;margin-top:5px;line-height:1.2}
+.tier1 .sub{font-size:10px;opacity:.7;margin-top:2px;line-height:1.2}
 
 /* ── Contact cards ── */
 .contact-card{background:#f9fafb;border-left:4px solid #ddd;border-radius:6px;padding:10px 14px;margin:6px 0}
@@ -488,37 +489,6 @@ hr { margin: 0.5rem 0 !important; }
 """, unsafe_allow_html=True)
 
 # ── Header ────────────────────────────────────────────────────────────────────
-col_h1, col_h2 = st.columns([3,1])
-with col_h1:
-    st.markdown(" ")
-    st.markdown("## 🚨 RoadSoS Buddy")
-    st.caption("by Safety Champs  |  " + T["tagline"])
-with col_h2:
-    try:
-        n = sqlite3.connect(DB_PATH).execute("SELECT COUNT(*) FROM contacts WHERE is_active=1").fetchone()[0]
-        st.metric(T["metric_label"], n)
-    except Exception:
-        pass  # DB not ready yet — metric hidden until init completes
-
-
-# ── SOS BUTTON ───────────────────────────────────────────────────────────────
-st.html("""
-<div style="display:flex;gap:10px;margin:8px 0 4px 0">
-  <a href="tel:112" style="flex:2;background:#dc2626;color:white;border-radius:12px;
-     font-size:22px;font-weight:900;padding:18px 10px;letter-spacing:2px;
-     text-decoration:none;display:block;text-align:center">SOS 112</a>
-  <a href="tel:108" style="flex:1;background:#16a34a;color:white;border-radius:12px;
-     font-size:18px;font-weight:800;padding:18px 6px;
-     text-decoration:none;display:block;text-align:center">108 Ambulance</a>
-</div>
-<div style="font-size:11px;color:#888;text-align:center;margin-top:3px">
-  Tap to call immediately &bull; Works offline &bull; 24x7 India
-</div>
-""")
-
-st.divider()
-
-# ── Offline / Online mode banner ─────────────────────────────────────────────
 def _is_online():
     try:
         http.get("https://1.1.1.1", timeout=2)
@@ -527,12 +497,49 @@ def _is_online():
         return False
 
 _online = _is_online()
-if _online:
-    st.info("Online mode — AI + live map search active. Works offline too: core features never need internet.")
-else:
-    st.success("OFFLINE MODE — Running fully offline. GPS + local DB + national numbers all working.")
+_online_dot = "🟢" if _online else "🔴"
+_online_txt = "Online" if _online else "Offline"
 
-st.divider()
+try:
+    _n_contacts = sqlite3.connect(DB_PATH).execute(
+        "SELECT COUNT(*) FROM contacts WHERE is_active=1"
+    ).fetchone()[0]
+except Exception:
+    _n_contacts = 0
+
+st.html(f"""
+<div style="display:flex;align-items:flex-start;justify-content:space-between;
+     padding:10px 0 4px 0;gap:8px">
+  <div>
+    <div style="font-size:26px;font-weight:900;color:#111;line-height:1.1">
+      🚨 RoadSoS Buddy
+    </div>
+    <div style="font-size:12px;color:#666;margin-top:4px">
+      by Safety Champs &nbsp;·&nbsp; {T["tagline"]}
+    </div>
+  </div>
+  <div style="text-align:right;flex-shrink:0">
+    <div style="font-size:22px;font-weight:900;color:#065f46">{_n_contacts if _n_contacts else "–"}</div>
+    <div style="font-size:10px;color:#666;line-height:1.3">verified<br>contacts</div>
+    <div style="font-size:11px;margin-top:4px">{_online_dot} {_online_txt}</div>
+  </div>
+</div>
+""")
+
+# ── SOS BUTTON ───────────────────────────────────────────────────────────────
+st.html("""
+<div style="display:flex;gap:10px;margin:6px 0 2px 0">
+  <a href="tel:112" style="flex:2;background:#dc2626;color:white;border-radius:12px;
+     font-size:24px;font-weight:900;padding:16px 10px;letter-spacing:2px;
+     text-decoration:none;display:block;text-align:center">SOS 112</a>
+  <a href="tel:108" style="flex:1;background:#15803d;color:white;border-radius:12px;
+     font-size:17px;font-weight:800;padding:16px 6px;line-height:1.25;
+     text-decoration:none;display:block;text-align:center">108<br>Ambulance</a>
+</div>
+<div style="font-size:11px;color:#888;text-align:center;margin-top:4px">
+  Tap to call &bull; Works offline &bull; 24×7 anywhere in India
+</div>
+""")
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
@@ -574,23 +581,26 @@ with st.sidebar:
     st.caption("IIT Madras Road Safety Hackathon 2026")
     st.caption("Soundarya · Shreya · Ashwin")
 
-# ── Language selector — visible on main page ──────────────────────────────────
-_lang_col, _ = st.columns([2, 3])
-with _lang_col:
+# ── Language selector — compact strip ────────────────────────────────────────
+_lc1, _lc2, _lc3 = st.columns([1, 2, 1])
+with _lc2:
     _lang_codes = list(LANG_OPTIONS.keys())
     _lang_idx = _lang_codes.index(st.session_state.get("ui_lang", "en"))
     _chosen = st.selectbox(
-        "🌐 Language / भाषा / மொழி",
+        "🌐",
         options=_lang_codes,
         format_func=lambda x: LANG_OPTIONS[x],
         index=_lang_idx,
         key="lang_main",
         label_visibility="collapsed",
+        help="Change language / भाषा बदलें / மொழி மாற்று",
     )
     if _chosen != st.session_state.get("ui_lang"):
         st.session_state.ui_lang = _chosen
         T = get_T()
         st.rerun()
+
+st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
 
 # ── Input section ─────────────────────────────────────────────────────────────
 st.subheader("📍 " + T["input_header"])
@@ -604,15 +614,16 @@ st.html("""
 <style>
 #gps-btn {
     background:#1d4ed8;color:white;border:none;
-    padding:14px 20px;border-radius:10px;font-size:16px;
-    font-weight:700;width:100%;cursor:pointer;margin-bottom:6px;
+    padding:15px 20px;border-radius:10px;font-size:17px;
+    font-weight:700;width:100%;cursor:pointer;margin-bottom:4px;
+    letter-spacing:0.3px;
 }
 #gps-btn:active{background:#1e40af;}
-#gps-status{font-size:13px;color:#555;text-align:center;min-height:20px;}
+#gps-status{font-size:12px;color:#666;text-align:center;min-height:18px;}
 #gps-coords{font-size:13px;color:#1d4ed8;text-align:center;margin-top:4px;font-weight:600;}
 </style>
-<button id="gps-btn" onclick="getGPS()">📍 Use My Phone Location (GPS)</button>
-<div id="gps-status">Tap above to auto-fill your coordinates</div>
+<button id="gps-btn" onclick="getGPS()">📍 Auto-detect My Location</button>
+<div id="gps-status"></div>
 <div id="gps-coords"></div>
 <script>
 function tryNav(url) {
@@ -687,7 +698,9 @@ with st.expander("Enter coordinates manually (optional)"):
     with col_lon:
         gps_lon = st.number_input(T["lon_label"], value=auto_lon, format="%.5f", step=0.001)
 
-go = st.button("Find Emergency Help", type="primary", use_container_width=True)
+go = st.button("🔍 Find Emergency Help Near Me", type="primary", use_container_width=True)
+
+st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
 
 # ── ALWAYS show Tier 1 numbers ────────────────────────────────────────────────
 st.subheader("✅ " + T["tier1_header"])
@@ -697,10 +710,12 @@ t1_cols = st.columns(4)
 for i, n in enumerate(INDIA_NATIONAL[:4]):
     with t1_cols[i]:
         icon = CATEGORY_ICONS.get(n["category"], "📞")
+        short = n.get("short", "")
         st.markdown(f"""
         <div class="tier1">
           <div class="num">{n['phone']}</div>
           <div class="lbl">{icon} {n['name']}</div>
+          {f'<div class="sub">{short}</div>' if short else ''}
         </div>""", unsafe_allow_html=True)
 
 # ── International Emergency Numbers ──────────────────────────────────────────
@@ -729,6 +744,29 @@ _filtered = [
 ]
 
 if _filtered:
+    def _country_card_html(c):
+        emerg  = c.get("emergency") or c.get("ambulance") or "—"
+        police = c.get("police") or "—"
+        amb    = c.get("ambulance") or "—"
+        fire   = c.get("fire") or "—"
+        cc     = c["cc"].upper()
+        name   = c["name"]
+        notes  = c.get("notes") or ""
+        return (
+            f'<div style="border:1px solid #e2e8f0;border-radius:10px;'
+            f'padding:10px 12px;margin:3px 0;background:#f8fafc;min-height:90px">'
+            f'<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">'
+            f'<span style="background:#1e3a5f;color:#fff;font-size:10px;font-weight:800;'
+            f'padding:2px 5px;border-radius:4px;letter-spacing:0.5px">{cc}</span>'
+            f'<span style="font-size:14px;font-weight:700;color:#111">{name}</span>'
+            f'</div>'
+            f'<div style="font-size:26px;font-weight:900;color:#dc2626;'
+            f'letter-spacing:1px;margin:3px 0;line-height:1.1">{emerg}</div>'
+            f'<div style="font-size:11px;color:#64748b;line-height:1.8">'
+            f'🚔&nbsp;{police}&nbsp;&nbsp;🚑&nbsp;{amb}&nbsp;&nbsp;🚒&nbsp;{fire}</div>'
+            f'</div>'
+        )
+
     # Show first 12 as cards; rest inside expander
     _show_limit = 12 if not _country_search else len(_filtered)
     _display = _filtered[:_show_limit]
@@ -738,25 +776,8 @@ if _filtered:
         _rcols = st.columns(_cols_per_row)
         for _ci, _c in enumerate(_row):
             with _rcols[_ci]:
-                _emerg = _c.get("emergency") or _c.get("ambulance") or "—"
-                _police = _c.get("police") or "—"
-                _amb    = _c.get("ambulance") or "—"
-                _fire   = _c.get("fire") or "—"
-                _flag_em = _flag(_c["cc"])
-                st.markdown(
-                    f'<div style="border:1px solid #e2e8f0;border-radius:10px;'
-                    f'padding:10px 12px;margin:3px 0;background:#f8fafc">'
-                    f'<div style="font-size:18px;font-weight:800;line-height:1.1">'
-                    f'{_flag_em} {_c["name"]}</div>'
-                    f'<div style="font-size:22px;font-weight:900;color:#dc2626;'
-                    f'letter-spacing:1px;margin:4px 0">{_emerg}</div>'
-                    f'<div style="font-size:11px;color:#64748b;line-height:1.6">'
-                    f'Police&nbsp;{_police} &nbsp;|&nbsp; '
-                    f'Amb&nbsp;{_amb} &nbsp;|&nbsp; '
-                    f'Fire&nbsp;{_fire}</div>'
-                    f'</div>',
-                    unsafe_allow_html=True
-                )
+                st.markdown(_country_card_html(_c), unsafe_allow_html=True)
+
     if not _country_search and len(_filtered) > _show_limit:
         with st.expander(f"Show all {len(_filtered)} countries"):
             _rest = _filtered[_show_limit:]
@@ -765,29 +786,11 @@ if _filtered:
                 _rcols = st.columns(_cols_per_row)
                 for _ci, _c in enumerate(_row):
                     with _rcols[_ci]:
-                        _emerg = _c.get("emergency") or _c.get("ambulance") or "—"
-                        _police = _c.get("police") or "—"
-                        _amb    = _c.get("ambulance") or "—"
-                        _fire   = _c.get("fire") or "—"
-                        _flag_em = _flag(_c["cc"])
-                        st.markdown(
-                            f'<div style="border:1px solid #e2e8f0;border-radius:10px;'
-                            f'padding:10px 12px;margin:3px 0;background:#f8fafc">'
-                            f'<div style="font-size:18px;font-weight:800;line-height:1.1">'
-                            f'{_flag_em} {_c["name"]}</div>'
-                            f'<div style="font-size:22px;font-weight:900;color:#dc2626;'
-                            f'letter-spacing:1px;margin:4px 0">{_emerg}</div>'
-                            f'<div style="font-size:11px;color:#64748b;line-height:1.6">'
-                            f'Police&nbsp;{_police} &nbsp;|&nbsp; '
-                            f'Amb&nbsp;{_amb} &nbsp;|&nbsp; '
-                            f'Fire&nbsp;{_fire}</div>'
-                            f'</div>',
-                            unsafe_allow_html=True
-                        )
+                        st.markdown(_country_card_html(_c), unsafe_allow_html=True)
 else:
     st.info(f"No country found matching '{_country_search}'")
 
-st.divider()
+st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
 
 # ── Results ───────────────────────────────────────────────────────────────────
 if go and (user_msg or (gps_lat != 0.0 and gps_lon != 0.0)):
@@ -968,8 +971,8 @@ if go and (user_msg or (gps_lat != 0.0 and gps_lon != 0.0)):
             st.info(T["no_contacts"])
 
     # 7. Share
-    st.divider()
-    st.subheader("Share: " + T["share_header"])
+    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+    st.subheader("📤 " + T["share_header"])
     contacts_for_share = (db_contacts + osm_contacts)[:3]
     nearby_text = ""
     if contacts_for_share:
@@ -983,25 +986,30 @@ if go and (user_msg or (gps_lat != 0.0 and gps_lon != 0.0)):
     )
     wa_url  = f"https://wa.me/?text={urllib.parse.quote(share_msg)}"
     sms_url = f"sms:?body={urllib.parse.quote(share_msg)}"
-    col_wa, col_sms, _ = st.columns([1,1,2])
-    with col_wa:
-        st.markdown(f"[WhatsApp]({wa_url})", unsafe_allow_html=True)
-    with col_sms:
-        st.markdown(f"[SMS]({sms_url})", unsafe_allow_html=True)
-    st.caption(T["share_caption"])
+    st.html(f"""
+    <div style="display:flex;gap:12px;margin:6px 0">
+      <a href="{wa_url}" style="flex:1;background:#16a34a;color:white;border-radius:10px;
+         font-size:16px;font-weight:700;padding:14px 10px;text-decoration:none;
+         display:block;text-align:center">📲 WhatsApp</a>
+      <a href="{sms_url}" style="flex:1;background:#1d4ed8;color:white;border-radius:10px;
+         font-size:16px;font-weight:700;padding:14px 10px;text-decoration:none;
+         display:block;text-align:center">💬 SMS</a>
+    </div>
+    <div style="font-size:11px;color:#888;text-align:center;margin-top:4px">{T["share_caption"]}</div>
+    """)
 
 elif go:
     st.warning(T["no_input"])
 
 # ── First Aid — ALWAYS VISIBLE (works offline, no search needed) ─────────────
-st.divider()
+st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
 st.subheader("🩺 First Aid & Golden Hour Guide")
-st.caption("Works fully offline · Based on WHO, Indian Red Cross & MoRTH guidelines")
+st.caption("Works fully offline · WHO · Indian Red Cross · MoRTH guidelines")
 _intent_for_aid = st.session_state.get("last_intent", None)
 render_first_aid(user_msg=user_msg, intent=_intent_for_aid)
 
 # Footer
-st.divider()
+st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
 col_f1, col_f2, col_f3 = st.columns(3)
 with col_f1:
     st.caption(T["footer1"])
