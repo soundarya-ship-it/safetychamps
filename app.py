@@ -174,7 +174,12 @@ CATEGORY_ICONS = {
     "trauma": "🏨",   "fuel": "⛽",   "blood_bank": "🩸",
 }
 
-OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+OVERPASS_MIRRORS = [
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+]
+OVERPASS_URL = OVERPASS_MIRRORS[0]   # kept for backward compat
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 
 
@@ -215,39 +220,45 @@ def geocode_text(text):
 
 
 def fetch_osm_contacts(lat, lon, radius_m=15000, categories=None):
-    """Fetch nearby emergency contacts from OpenStreetMap (free, global)."""
-    if categories is None:
-        categories = ["hospital", "ambulance", "police", "towing", "puncture"]
+    """
+    Fetch nearby emergency contacts from OpenStreetMap via Overpass API.
+    Uses a compact nwr+regex query (3 lines instead of 18+) to avoid rate-limits.
+    Falls back through 3 Overpass mirrors automatically.
+    """
+    # Compact Overpass query — nwr = node+way+relation in one shot
+    # Much lighter than the old approach of separate node/way per tag
+    r_small = min(radius_m, 10000)   # towing/puncture: smaller radius
+    query = f"""[out:json][timeout:8];
+(
+  nwr["amenity"~"^(hospital|clinic|police|fire_station|ambulance_station|pharmacy)$"](around:{radius_m},{lat},{lon});
+  nwr["healthcare"~"^(hospital|clinic|doctor)$"](around:{radius_m},{lat},{lon});
+  nwr["emergency"~"^(ambulance_station|yes)$"](around:{radius_m},{lat},{lon});
+  nwr["shop"~"^(tyres|car_repair)$"](around:{r_small},{lat},{lon});
+);
+out center 40;"""
 
-    tag_map = {
-        "hospital":  [('amenity','hospital'), ('amenity','clinic'), ('healthcare','hospital')],
-        "ambulance": [('emergency','ambulance_station'), ('amenity','ambulance_station')],
-        "police":    [('amenity','police')],
-        "pharmacy":  [('amenity','pharmacy')],
-        "fire":      [('amenity','fire_station')],
-        "towing":    [('shop','car_repair')],
-        "puncture":  [('shop','tyres'), ('shop','bicycle')],
-    }
+    elements = []
+    last_err = None
+    for mirror in OVERPASS_MIRRORS:
+        try:
+            resp = http.post(mirror, data={"data": query}, timeout=12)
+            if resp.status_code == 200:
+                data = resp.json()
+                elements = data.get("elements", [])
+                break   # success — stop trying mirrors
+        except Exception as e:
+            last_err = e
+            continue   # try next mirror
 
-    parts = []
-    for cat in categories:
-        for k, v in tag_map.get(cat, []):
-            parts.append(f'node["{k}"="{v}"](around:{radius_m},{lat},{lon});')
-            parts.append(f'way["{k}"="{v}"](around:{radius_m},{lat},{lon});')
-
-    query = f'[out:json][timeout:25];\n(\n{"".join(parts)}\n);\nout body center;'
-
-    try:
-        resp = http.post(OVERPASS_URL, data={"data": query}, timeout=10)
-        elements = resp.json().get("elements", [])
-    except Exception as e:
-        st.warning(f"OSM query issue (check internet): {e}")
+    if not elements and last_err:
+        # Silent — caller shows fallback numbers; don't spam a warning
         return []
 
     results = []
     for el in elements:
         tags = el.get("tags", {})
-        name = tags.get("name") or tags.get("name:en") or tags.get("operator")
+        name = (tags.get("name") or tags.get("name:en")
+                or tags.get("name:ta") or tags.get("operator"))
         if not name:
             continue
         phone = (tags.get("phone") or tags.get("contact:phone")
@@ -257,23 +268,34 @@ def fetch_osm_contacts(lat, lon, radius_m=15000, categories=None):
         if not el_lat or not el_lon:
             continue
 
-        amenity = tags.get("amenity",""); shop = tags.get("shop","")
-        if amenity=="hospital" or tags.get("healthcare")=="hospital": cat="hospital"
-        elif "ambulance" in amenity: cat="ambulance"
-        elif amenity=="police":   cat="police"
-        elif amenity=="pharmacy": cat="pharmacy"
-        elif amenity=="fire_station": cat="fire"
-        elif shop=="tyres" or shop=="bicycle": cat="puncture"
-        elif "car_repair" in amenity or "car_repair" in shop: cat="towing"
-        else: cat="other"
+        amenity = tags.get("amenity", "")
+        shop    = tags.get("shop", "")
+        healthcare = tags.get("healthcare", "")
+        if amenity in ("hospital", "clinic") or healthcare in ("hospital", "clinic"):
+            cat = "hospital"
+        elif "ambulance" in amenity or tags.get("emergency") == "ambulance_station":
+            cat = "ambulance"
+        elif amenity == "police":
+            cat = "police"
+        elif amenity == "pharmacy":
+            cat = "pharmacy"
+        elif amenity == "fire_station":
+            cat = "fire"
+        elif shop in ("tyres", "bicycle"):
+            cat = "puncture"
+        elif shop == "car_repair" or "car_repair" in amenity:
+            cat = "towing"
+        else:
+            cat = "other"
 
         dist = haversine_km(lat, lon, el_lat, el_lon)
-        addr_parts = [tags.get(k) for k in ["addr:housenumber","addr:street","addr:city"] if tags.get(k)]
+        addr_parts = [tags.get(k) for k in
+                      ["addr:housenumber", "addr:street", "addr:city"] if tags.get(k)]
         results.append({
             "name": name, "phone": phone, "category": cat, "tier": 3,
             "lat": el_lat, "lon": el_lon, "distance_km": dist,
             "address": ", ".join(addr_parts),
-            "source": "osm", "confidence": 58 if phone else 35,
+            "source": "osm", "confidence": 60 if phone else 38,
         })
 
     results.sort(key=lambda x: x["distance_km"])
