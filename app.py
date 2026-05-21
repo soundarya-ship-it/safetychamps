@@ -631,24 +631,29 @@ try:
 except Exception:
     _n_contacts = 0
 
-st.html(f"""
-<div style="display:flex;align-items:flex-start;justify-content:space-between;
-     padding:10px 0 4px 0;gap:8px;font-family:system-ui,sans-serif">
-  <div>
-    <div style="font-size:26px;font-weight:800;color:#111827;line-height:1.1">
-      🚨 RoadSoS Buddy
-    </div>
-    <div style="font-size:13px;color:#4B5563;margin-top:5px">
-      by Safety Champs &nbsp;·&nbsp; {T["tagline"]}
-    </div>
-  </div>
-  <div style="text-align:right;flex-shrink:0">
-    <div style="font-size:24px;font-weight:800;color:#064E3B;line-height:1">{_n_contacts if _n_contacts else "–"}</div>
-    <div style="font-size:11px;color:#9CA3AF;line-height:1.4;margin-top:2px">verified<br>contacts</div>
-    <div style="font-size:12px;color:#4B5563;margin-top:5px">{_online_dot} {_online_txt}</div>
-  </div>
-</div>
-""")
+_hcol1, _hcol2 = st.columns([3, 1])
+with _hcol1:
+    st.markdown(
+        f'<div style="padding:6px 0 2px 0">'
+        f'<div style="font-size:26px;font-weight:800;color:#111827;line-height:1.1;'
+        f'font-family:system-ui,sans-serif">🚨 RoadSoS Buddy</div>'
+        f'<div style="font-size:13px;color:#4B5563;margin-top:5px;'
+        f'font-family:system-ui,sans-serif">by Safety Champs &nbsp;·&nbsp; {T["tagline"]}</div>'
+        f'</div>',
+        unsafe_allow_html=True
+    )
+with _hcol2:
+    st.markdown(
+        f'<div style="text-align:right;padding-top:6px;font-family:system-ui,sans-serif">'
+        f'<div style="font-size:24px;font-weight:800;color:#064E3B;line-height:1">'
+        f'{_n_contacts if _n_contacts else "–"}</div>'
+        f'<div style="font-size:11px;color:#9CA3AF;line-height:1.5;margin-top:2px">'
+        f'verified<br>contacts</div>'
+        f'<div style="font-size:12px;color:#4B5563;margin-top:5px">'
+        f'{_online_dot}&nbsp;{_online_txt}</div>'
+        f'</div>',
+        unsafe_allow_html=True
+    )
 
 # ── SOS BUTTON ───────────────────────────────────────────────────────────────
 st.html("""
