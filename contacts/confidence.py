@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 SOURCE_BASE = {
     "government_mandated": 100,
     "nhp":                  88,   # National Health Portal
+    "nhp_data_gov":         78,   # data.gov.in NHP open dataset
     "nhai":                 90,   # NHAI official directory
     "state_police_website": 85,
     "google_maps":          72,
