@@ -1084,52 +1084,39 @@ def _build_wa_url(lat=0.0, lon=0.0, situation="", urgency="", nearest_name="", n
 
 
 # ── Location detection — auto-fire GPS on first page load ───────────────────
-# On first render of a session we set _gps_pending=True so streamlit-js-eval's
-# get_geolocation() fires immediately, which triggers the browser's native
-# permission prompt. On Chrome/Edge/Firefox the prompt appears without any
-# user action. iOS Safari often requires a user gesture, so we also show the
-# big "Find help near me" button below as a fallback that retries the request.
+# We use the browser's native navigator.geolocation API directly via raw HTML
+# (see the GPS button below) instead of streamlit-js-eval, which silently
+# failed for us. On first load a small JS shim "clicks" the button for the
+# user — Chrome/Edge/Firefox prompt instantly; iOS Safari requires the user
+# to tap the button manually because Apple blocks programmatic clicks.
 if "gps_lat" not in st.session_state:
     st.session_state.gps_lat = 0.0
 if "gps_lon" not in st.session_state:
     st.session_state.gps_lon = 0.0
 if "_gps_first_load" not in st.session_state:
     st.session_state["_gps_first_load"] = True
-    st.session_state["_gps_pending"] = True
 
-# Accept ?lat=...&lon=... URL params (backwards-compat / desktop testing)
+# ── Accept ?lat=...&lon=... URL params ──────────────────────────────────────
+# This is how the raw-HTML GPS button below feeds coordinates back into
+# Streamlit: the button runs navigator.geolocation in the browser, then
+# redirects to /?lat=X&lon=Y. Streamlit picks the params up here.
 _params = st.query_params
 if "lat" in _params and "lon" in _params and not st.session_state.gps_lat:
     try:
         st.session_state.gps_lat = float(_params["lat"])
         st.session_state.gps_lon = float(_params["lon"])
-        st.session_state["_gps_pending"] = False
+        # Clear the params from the address bar so a refresh doesn't re-trigger
+        st.query_params.clear()
     except Exception:
         pass
-
-try:
-    from streamlit_js_eval import get_geolocation as _get_geolocation
-    _GPS_COMPONENT = True
-except ImportError:
-    _GPS_COMPONENT = False
-
-# Resolve GPS if pending
-if _GPS_COMPONENT and st.session_state.get("_gps_pending"):
-    _loc = _get_geolocation()
-    if _loc and isinstance(_loc, dict) and _loc.get("coords"):
-        st.session_state.gps_lat = float(_loc["coords"]["latitude"])
-        st.session_state.gps_lon = float(_loc["coords"]["longitude"])
-        st.session_state["_gps_pending"] = False
-        st.rerun()
 
 auto_lat = st.session_state.gps_lat
 auto_lon = st.session_state.gps_lon
 have_gps = (auto_lat != 0.0 and auto_lon != 0.0)
 
 # ── Where are you input row (always visible) ───────────────────────────────
-# Either GPS resolves (results appear) or the user types a place name. Either
-# path triggers an immediate search — no "Find help" button required once we
-# have ANY location signal.
+# Search runs the moment any location signal arrives — GPS coords, typed place,
+# or a refinement message from the expander below.
 _loc_col1, _loc_col2 = st.columns([3, 1])
 with _loc_col1:
     place_input = st.text_input(
@@ -1139,29 +1126,74 @@ with _loc_col1:
         label_visibility="collapsed",
     )
 with _loc_col2:
-    # The button is the iOS-Safari user-gesture fallback. On other browsers
-    # GPS already auto-fired, so this button is just a "re-detect" shortcut.
-    if st.button("📍 GPS", use_container_width=True,
-                 type="primary" if not have_gps else "secondary",
-                 help="Detect location"):
-        st.session_state["_gps_pending"] = True
-        st.session_state.gps_lat = 0.0
-        st.session_state.gps_lon = 0.0
-        st.rerun()
+    # ── Raw HTML GPS button — no streamlit-js-eval dependency ──
+    # streamlit-js-eval was silently failing for us. The native
+    # navigator.geolocation API works reliably, so we use it directly:
+    # the button runs getCurrentPosition, then redirects with lat/lon
+    # in the URL. Our query-param handler above picks them up on the
+    # next page render.
+    st.html("""
+<button id="roadsos-gps-btn" onclick="
+  if (this.dataset.busy) return;
+  this.dataset.busy = '1';
+  this.innerText = '⏳ ...';
+  navigator.geolocation.getCurrentPosition(
+    p => {
+      const u = new URL(window.location.href);
+      u.searchParams.set('lat', p.coords.latitude);
+      u.searchParams.set('lon', p.coords.longitude);
+      window.location.replace(u.toString());
+    },
+    e => {
+      this.dataset.busy = '';
+      this.innerText = '📍 GPS';
+      alert('GPS failed: ' + (e.message || 'permission denied') + '. Type a place above instead.');
+    },
+    { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 }
+  );
+" style="width:100%;background:#DC2626;color:#FFFFFF;border:none;
+         border-radius:8px;padding:13px 0;font-size:15px;font-weight:700;
+         cursor:pointer;font-family:system-ui,sans-serif;letter-spacing:0.3px">
+  📍 GPS
+</button>
+""")
+
+# ── Auto-fire GPS once per session (Chrome/Edge/Firefox; iOS Safari ignores) ──
+# Runs ONLY if: no coords yet AND no URL params already AND not tried this
+# session. On the first page load, the script clicks the GPS button for the
+# user. iOS Safari blocks programmatic clicks → user taps the button manually.
+if not have_gps:
+    st.html("""
+<script>
+(function () {
+  try {
+    if (sessionStorage.getItem('roadsos_gps_tried')) return;
+    if (new URL(window.location.href).searchParams.get('lat')) return;
+    sessionStorage.setItem('roadsos_gps_tried', '1');
+    // Fire as soon as the GPS button exists in DOM. We poll briefly because
+    // Streamlit renders the button slightly after this script runs.
+    let tries = 0;
+    const fire = () => {
+      const btn = document.getElementById('roadsos-gps-btn');
+      if (btn) {
+        btn.click();
+      } else if (++tries < 40) {
+        setTimeout(fire, 100);
+      }
+    };
+    setTimeout(fire, 250);
+  } catch (e) { console.warn('[GPS auto-fire]', e); }
+})();
+</script>
+""")
 
 # ── Decide whether to run a search ─────────────────────────────────────────
-# Any of: GPS coords, typed place, or refinement message from the expander
-# below results triggers it.
 user_msg = st.session_state.get("refine_msg", "").strip()
 place_txt = (place_input or "").strip()
 should_search = have_gps or bool(place_txt) or bool(user_msg)
 
 if not should_search:
-    if st.session_state.get("_gps_pending"):
-        st.info("⏳ Locating you… please **Allow** when your browser prompts. "
-                "(Or type a place above.)")
-    else:
-        st.caption("Type a city / NH number above, or tap the GPS button to auto-detect.")
+    st.caption("Tap **📍 GPS** to share location, or type a city / NH number above.")
 
 # Variables consumed by the results block below
 gps_lat = auto_lat
