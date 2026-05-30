@@ -118,12 +118,30 @@ try:
 except ImportError:
     GROQ_AVAILABLE = False
 
-# ── API keys: check st.secrets (Streamlit Cloud) then os.environ (.env) ──────
+# ── API keys: check os.environ first, then st.secrets (Streamlit Cloud) ──────
+# Note: touching st.secrets[...] renders a "No secrets found" warning widget
+# when no secrets.toml exists — and our try/except doesn't suppress that side
+# effect. So we only touch st.secrets when we know a secrets.toml is present.
+_SECRETS_PATHS = (
+    os.path.join(os.path.dirname(__file__), ".streamlit", "secrets.toml"),
+    os.path.expanduser("~/.streamlit/secrets.toml"),
+)
+_SECRETS_PRESENT = any(os.path.exists(p) for p in _SECRETS_PATHS)
+
+
 def _get_secret(key):
-    try:
-        return st.secrets[key]
-    except Exception:
-        return os.environ.get(key, "")
+    # 1. Environment variable (local .env, Docker, generic deploy)
+    v = os.environ.get(key, "")
+    if v:
+        return v
+    # 2. Streamlit secrets — only checked when a secrets.toml actually exists,
+    #    otherwise st.secrets prints a warning we can't suppress.
+    if _SECRETS_PRESENT:
+        try:
+            return st.secrets.get(key, "") or ""
+        except Exception:
+            pass
+    return ""
 
 # ── DB path + auto-init ───────────────────────────────────────────────────────
 DB_PATH = os.path.join(os.path.dirname(__file__), "roadsos.db")
