@@ -598,7 +598,7 @@ function lookupOffline() {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// Distance + nearest hospital ranking
+// Distance + category grouping (mirrors app.py)
 // ════════════════════════════════════════════════════════════════════════════
 function haversineKm(lat1, lon1, lat2, lon2) {
   const R = 6371;
@@ -610,27 +610,54 @@ function haversineKm(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-function findNearby(lat, lon, radiusKm = 25) {
+const GROUPS = [
+  {
+    key:   "medical",
+    title: "🏥 Medical",
+    cats:  ["trauma","specialty_hospital","neuro_spinal","burn_centre",
+            "paediatric_trauma","ortho_trauma","hospital","blood_bank","ambulance"],
+    specialty: ["trauma","specialty_hospital","neuro_spinal","burn_centre","paediatric_trauma"],
+  },
+  {
+    key:   "safety",
+    title: "🚔 Safety",
+    cats:  ["police","fire"],
+    specialty: [],
+  },
+  {
+    key:   "vehicle",
+    title: "🚛 Vehicle & Roadside",
+    cats:  ["towing","highway_helpline","puncture","pharmacy","fuel"],
+    specialty: [],
+  },
+];
+
+const CONFIDENCE_FLOOR = 50;
+
+/**
+ * Annotate every contact with its distance, then split into the 3 sections.
+ * Specialty-medical categories get a 2 km "boost" so trauma centres surface
+ * above generic hospitals when seconds matter.
+ */
+function groupContacts(lat, lon, radiusKm = 25) {
   if (!CONTACTS.length) return [];
-  return CONTACTS
+  const withDist = CONTACTS
     .filter(c => c.lat != null && c.lon != null && c.tier > 1)
-    .map(c => ({
-      ...c,
-      distKm: haversineKm(lat, lon, c.lat, c.lon),
-    }))
-    .filter(c => c.distKm <= radiusKm)
-    .sort((a, b) => {
-      // Hospital first, then trauma, then police; within category by distance
-      const priority = (x) =>
-        x.category === 'hospital' ? 0 :
-        x.category === 'trauma' || x.category === 'specialty_hospital' ? 1 :
-        x.category === 'blood_bank' ? 2 :
-        x.category === 'police' ? 3 :
-        x.category === 'ambulance' ? 4 : 5;
-      const pa = priority(a), pb = priority(b);
-      if (pa !== pb) return pa - pb;
-      return a.distKm - b.distKm;
+    .map(c => ({ ...c, distKm: haversineKm(lat, lon, c.lat, c.lon) }))
+    .filter(c => c.distKm <= radiusKm);
+
+  return GROUPS.map(g => {
+    const members = withDist.filter(c => g.cats.includes(c.category));
+    members.forEach(c => {
+      c.sortDist = g.specialty.includes(c.category) ? Math.max(0, c.distKm - 2) : c.distKm;
     });
+    members.sort((a, b) => a.sortDist - b.sortDist);
+    return {
+      ...g,
+      visible: members.filter(c => (c.confidence || 0) >= CONFIDENCE_FLOOR),
+      hidden:  members.filter(c => (c.confidence || 0) <  CONFIDENCE_FLOOR),
+    };
+  }).filter(g => g.visible.length || g.hidden.length);
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -658,46 +685,84 @@ function categoryIcon(cat) {
   }[cat] || '📍';
 }
 
+function cardHtml(c, faded = false) {
+  const safePhone = encodeURIComponent(c.phone);
+  const opacity   = faded ? 'opacity:0.65' : '';
+  return `
+    <div class="card cat-${escapeHtml(c.category)}" style="${opacity}">
+      <div class="top">
+        <div>
+          <div class="name">${categoryIcon(c.category)} ${escapeHtml(c.name)}</div>
+          <div class="meta">
+            ${escapeHtml(c.district || '')}${c.district ? ', ' : ''}
+            ${escapeHtml(c.state || '')}
+            ${confPill(c.confidence || 50)}
+          </div>
+        </div>
+        <div class="dist">${c.distKm.toFixed(1)} km</div>
+      </div>
+      <div class="phones">
+        <a class="dial" href="tel:${safePhone}">📞 ${escapeHtml(c.phone)}</a>
+        ${c.phone_alt
+          ? `<a class="dial alt" href="tel:${encodeURIComponent(c.phone_alt)}">Alt: ${escapeHtml(c.phone_alt)}</a>`
+          : ''
+        }
+      </div>
+    </div>
+  `;
+}
+
+function sectionHtml(group) {
+  const visibleTop = group.visible.slice(0, 3).map(c => cardHtml(c)).join('');
+  const visibleMore = group.visible.slice(3).map(c => cardHtml(c)).join('');
+  const hiddenCards = group.hidden.map(c => cardHtml(c, true)).join('');
+
+  const moreBlock = visibleMore
+    ? `<details style="margin-top:6px">
+         <summary>Show ${group.visible.length - 3} more nearby</summary>
+         ${visibleMore}
+       </details>`
+    : '';
+  const hiddenBlock = hiddenCards
+    ? `<details style="margin-top:6px">
+         <summary>⚠️ ${group.hidden.length} lower-confidence (may not connect)</summary>
+         ${hiddenCards}
+       </details>`
+    : '';
+
+  return `
+    <h2 style="margin-top:14px">${group.title} — ${group.visible.length} nearby</h2>
+    ${visibleTop}
+    ${moreBlock}
+    ${hiddenBlock}
+  `;
+}
+
 function renderResults() {
   if (!CURRENT) return;
 
   document.getElementById('results-section').style.display = 'block';
   document.getElementById('share-section').style.display = 'block';
 
-  const nearby = findNearby(CURRENT.lat, CURRENT.lon, 25);
+  const groups = groupContacts(CURRENT.lat, CURRENT.lon, 25);
+  const totalVisible = groups.reduce((n, g) => n + g.visible.length, 0);
+
   document.getElementById('results-header').textContent =
-    nearby.length
-      ? `${nearby.length} contacts within 25 km`
+    totalVisible
+      ? `Nearby help — grouped by what you need`
       : `No contacts found within 25 km — use the buttons above.`;
 
-  const html = nearby.slice(0, 15).map(c => {
-    const safePhone = encodeURIComponent(c.phone);
-    return `
-      <div class="card cat-${escapeHtml(c.category)}">
-        <div class="top">
-          <div>
-            <div class="name">${categoryIcon(c.category)} ${escapeHtml(c.name)}</div>
-            <div class="meta">
-              ${escapeHtml(c.district || '')}${c.district ? ', ' : ''}
-              ${escapeHtml(c.state || '')}
-              ${confPill(c.confidence || 50)}
-            </div>
-          </div>
-          <div class="dist">${c.distKm.toFixed(1)} km</div>
-        </div>
-        <div class="phones">
-          <a class="dial" href="tel:${safePhone}">📞 ${escapeHtml(c.phone)}</a>
-          ${c.phone_alt
-            ? `<a class="dial alt" href="tel:${encodeURIComponent(c.phone_alt)}">Alt: ${escapeHtml(c.phone_alt)}</a>`
-            : ''
-          }
-        </div>
-      </div>
-    `;
-  }).join('');
+  document.getElementById('results').innerHTML =
+    groups.map(sectionHtml).join('');
 
-  document.getElementById('results').innerHTML = html;
-  renderShare(nearby[0]);
+  // For the share card: pick the nearest VISIBLE medical contact if any,
+  // else nearest of anything, else null
+  const med = groups.find(g => g.key === 'medical');
+  const sharePick =
+    (med && med.visible[0])      ||
+    (groups[0] && groups[0].visible[0]) ||
+    null;
+  renderShare(sharePick);
 }
 
 function renderShare(nearest) {

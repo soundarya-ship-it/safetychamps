@@ -502,6 +502,167 @@ def record_feedback(contact_id, worked):
     conn.commit(); conn.close()
 
 
+# ── Category grouping + filter-then-sort ──────────────────────────────────────
+# Search results used to be a single mixed list sorted by tier+confidence+distance.
+# In an emergency that's hard to scan — the user is looking for one specific kind
+# of help. We group contacts into 3 sections (Medical / Safety / Vehicle), filter
+# out low-confidence numbers so users don't waste time dialling dead lines, and
+# sort by distance within each group. Trauma centres get a 2 km "boost" inside
+# Medical for critical cases — a verified trauma centre 10 km away is usually
+# better than a generic clinic 9 km away when minutes matter.
+
+CATEGORY_GROUPS = [
+    {
+        "key":   "medical",
+        "title": "🏥 Medical",
+        "categories": [
+            "trauma", "specialty_hospital", "neuro_spinal",
+            "burn_centre", "paediatric_trauma", "ortho_trauma",
+            "hospital", "blood_bank", "ambulance",
+        ],
+        "specialty_categories": [
+            "trauma", "specialty_hospital", "neuro_spinal",
+            "burn_centre", "paediatric_trauma",
+        ],
+    },
+    {
+        "key":   "safety",
+        "title": "🚔 Safety",
+        "categories": ["police", "fire"],
+        "specialty_categories": [],
+    },
+    {
+        "key":   "vehicle",
+        "title": "🚛 Vehicle & Roadside",
+        "categories": [
+            "towing", "highway_helpline", "puncture", "pharmacy", "fuel",
+        ],
+        "specialty_categories": [],
+    },
+]
+
+CONFIDENCE_FLOOR = 50   # contacts below this get hidden behind an expander
+
+
+def group_contacts(contacts, urgency="high"):
+    """
+    Split a flat contact list into the three display sections, sort each by
+    distance, and partition into "visible" (above floor) and "hidden" lists.
+
+    For critical/high urgency, specialty-medical categories get a 2 km
+    distance bonus so trauma centres are likely to surface above generic
+    hospitals when seconds matter.
+    """
+    is_critical = urgency in ("critical", "high")
+    out = {}
+    for group in CATEGORY_GROUPS:
+        members = [c for c in contacts if c.get("category") in group["categories"]]
+
+        for c in members:
+            base = c.get("distance_km") if c.get("distance_km") is not None else 999
+            boost = 2 if (is_critical and c.get("category") in group["specialty_categories"]) else 0
+            c["_sort_distance"] = max(0, base - boost)
+
+        members.sort(key=lambda c: c["_sort_distance"])
+
+        floor = CONFIDENCE_FLOOR
+        out[group["key"]] = {
+            "title":   group["title"],
+            "visible": [c for c in members if c.get("confidence", 0) >= floor],
+            "hidden":  [c for c in members if c.get("confidence", 0) <  floor],
+        }
+    return out
+
+
+def render_contact_card(c, faded=False):
+    """Single contact card. Factored out so grouped sections can reuse it."""
+    t = get_T()
+    icon  = CATEGORY_ICONS.get(c.get("category", "other"), "[!]")
+    conf  = c.get("confidence", 50)
+    badge_icon, badge_text, _ = confidence_badge(conf)
+    phone = c.get("phone") or "--"
+    dist  = c.get("distance_km", "?")
+    tier_label = {1: "National", 2: "Verified", 3: "Local"}.get(c.get("tier", 3), "Local")
+
+    title = f"{icon} **{c['name']}** - {dist} km | {badge_icon} {badge_text} | {tier_label}"
+    if faded:
+        title = "⚠️ " + title
+
+    with st.expander(title, expanded=(not faded and (conf >= 80 or c.get("tier", 3) <= 2))):
+        col_a, col_b, col_c = st.columns([2, 2, 1])
+        with col_a:
+            if phone and phone != "--":
+                # Make the phone number tap-to-call on mobile
+                phone_clean = urllib.parse.quote(phone)
+                st.markdown(
+                    f'<a href="tel:{phone_clean}" style="text-decoration:none">'
+                    f'<p class="big-phone" style="margin:0">{phone}</p></a>',
+                    unsafe_allow_html=True,
+                )
+                badge_html = get_badge_html(phone, c.get("country_code", "IN"))
+                if badge_html:
+                    st.markdown(badge_html, unsafe_allow_html=True)
+                if c.get("phone_alt"):
+                    alt_clean = urllib.parse.quote(c["phone_alt"])
+                    st.markdown(
+                        f'Alt: <a href="tel:{alt_clean}">**{c["phone_alt"]}**</a>',
+                        unsafe_allow_html=True,
+                    )
+            else:
+                st.warning(t["no_phone"])
+            if c.get("address"):
+                st.caption(f"Addr: {c['address']}")
+        with col_b:
+            st.progress(conf / 100, text=f"{t['confidence_label']}: {conf}%")
+            st.caption(f"{t['source_label']}: {c.get('source', 'unknown')} | Tier {c.get('tier', 3)}")
+            if conf < 50:
+                st.warning(t["low_conf_warning"])
+        with col_c:
+            cid = c.get("id", 0)
+            if cid and st.button("OK " + t["btn_worked"], key=f"ok_{cid}_{c['name'][:8]}"):
+                record_feedback(cid, True)
+                st.success(t["feedback_ok"])
+            if cid and st.button("X " + t["btn_failed"], key=f"no_{cid}_{c['name'][:8]}"):
+                record_feedback(cid, False)
+                st.error(t["feedback_fail"])
+
+
+def render_grouped_contacts(grouped):
+    """
+    Render the three sections: Medical → Safety → Vehicle.
+    - Top 3 of each group visible by default
+    - "Show N more nearby" expander for the rest above floor
+    - "N lower-confidence (may not connect)" expander for below floor
+    - Empty sections are skipped
+    """
+    any_rendered = False
+    for group in CATEGORY_GROUPS:
+        section = grouped.get(group["key"], {})
+        visible = section.get("visible", [])
+        hidden  = section.get("hidden", [])
+
+        if not visible and not hidden:
+            continue
+        any_rendered = True
+
+        st.subheader(f"{group['title']} — {len(visible)} nearby")
+
+        for c in visible[:3]:
+            render_contact_card(c)
+
+        if len(visible) > 3:
+            with st.expander(f"Show {len(visible) - 3} more nearby"):
+                for c in visible[3:]:
+                    render_contact_card(c)
+
+        if hidden:
+            with st.expander(f"⚠️ {len(hidden)} lower-confidence (may not connect)"):
+                for c in hidden:
+                    render_contact_card(c, faded=True)
+
+    return any_rendered
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # STREAMLIT UI
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1222,46 +1383,11 @@ if go and (user_msg or (gps_lat != 0.0 and gps_lon != 0.0)):
             else:
                 st.warning(f"**{T['callorder_medium']}**")
 
-        # 6. Show nearby contacts
+        # 6. Show nearby contacts — grouped by category, filter-then-sort
         if all_contacts:
             st.subheader(f"{len(all_contacts)} " + T["contacts_found"].format(r=radius_km))
-            for c in all_contacts[:12]:
-                icon  = CATEGORY_ICONS.get(c.get("category","other"), "[!]")
-                conf  = c.get("confidence", 50)
-                badge_icon, badge_text, badge_color = confidence_badge(conf)
-                phone = c.get("phone") or "--"
-                dist  = c.get("distance_km","?")
-                tier_label = {1:"National",2:"Verified",3:"Local"}.get(c.get("tier",3),"Local")
-                with st.expander(
-                    f"{icon} **{c['name']}** - {dist} km | {badge_icon} {badge_text} | {tier_label}",
-                    expanded=(conf >= 80 or c.get("tier",3) <= 2)
-                ):
-                    col_a, col_b, col_c = st.columns([2,2,1])
-                    with col_a:
-                        if phone and phone != "--":
-                            st.markdown(f'<p class="big-phone">{phone}</p>', unsafe_allow_html=True)
-                            badge_html = get_badge_html(phone, c.get("country_code", "IN"))
-                            if badge_html:
-                                st.markdown(badge_html, unsafe_allow_html=True)
-                            if c.get("phone_alt"):
-                                st.markdown(f"Alt: **{c['phone_alt']}**")
-                        else:
-                            st.warning(T["no_phone"])
-                        if c.get("address"):
-                            st.caption(f"Addr: {c['address']}")
-                    with col_b:
-                        st.progress(conf/100, text=f"{T['confidence_label']}: {conf}%")
-                        st.caption(f"{T['source_label']}: {c.get('source','unknown')} | Tier {c.get('tier',3)}")
-                        if conf < 50:
-                            st.warning(T["low_conf_warning"])
-                    with col_c:
-                        cid = c.get("id", 0)
-                        if cid and st.button("OK " + T["btn_worked"], key=f"ok_{cid}_{c['name'][:8]}"):
-                            record_feedback(cid, True)
-                            st.success(T["feedback_ok"])
-                        if cid and st.button("X " + T["btn_failed"], key=f"no_{cid}_{c['name'][:8]}"):
-                            record_feedback(cid, False)
-                            st.error(T["feedback_fail"])
+            grouped = group_contacts(all_contacts, urgency=intent.get("urgency", "high"))
+            render_grouped_contacts(grouped)
         else:
             # No local contacts from DB or OSM — show national numbers prominently
             st.markdown("""
