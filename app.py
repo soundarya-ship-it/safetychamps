@@ -105,18 +105,9 @@ st.markdown(
       .then((r) => console.log('[PWA] SW registered, scope:', r.scope))
       .catch((e) => console.warn('[PWA] SW registration failed:', e));
   }
-  // ── GPS bridge — loaded as external script so React doesn't strip it.
-  // The bridge listens for postMessage from the GPS button's iframe
-  // (which can't navigate the parent directly due to sandbox) and
-  // does the actual window.location.replace(?lat&lon) redirect. ──────────
-  if (!document.querySelector('script[data-roadsos-bridge]')) {
-    const _s = document.createElement('script');
-    _s.src = '/app/static/bridge.js';
-    _s.setAttribute('data-roadsos-bridge', '1');
-    _s.async = false;
-    document.head.appendChild(_s);
-    console.log('[PWA bootstrap] bridge script appended');
-  }
+  // GPS now goes through streamlit-geolocation (a proper declared
+  // Streamlit component) which handles parent↔iframe communication
+  // via Streamlit's official protocol. No bridge needed.
   // ── Offline-first redirect ────────────────────────────────────────────
   // Streamlit's interactivity requires a live websocket. If the device is
   // offline at first load, the page would render but every interaction
@@ -1095,29 +1086,23 @@ def _build_wa_url(lat=0.0, lon=0.0, situation="", urgency="", nearest_name="", n
     return f"https://wa.me/?text={urllib.parse.quote(msg.strip())}"
 
 
-# ── Location detection — auto-fire GPS on first page load ───────────────────
-# We use the browser's native navigator.geolocation API directly via raw HTML
-# (see the GPS button below) instead of streamlit-js-eval, which silently
-# failed for us. On first load a small JS shim "clicks" the button for the
-# user — Chrome/Edge/Firefox prompt instantly; iOS Safari requires the user
-# to tap the button manually because Apple blocks programmatic clicks.
+# ── Location detection ──────────────────────────────────────────────────────
+# We use the streamlit-geolocation component (a proper declared Streamlit
+# component, not just an iframe HTML dump). It handles the iframe ↔ parent
+# bridging via Streamlit's official componentValue protocol, so the
+# coordinates flow back into Python state directly — no sandboxed-iframe-
+# can't-navigate-parent issue like we hit with raw HTML/JS.
 if "gps_lat" not in st.session_state:
     st.session_state.gps_lat = 0.0
 if "gps_lon" not in st.session_state:
     st.session_state.gps_lon = 0.0
-if "_gps_first_load" not in st.session_state:
-    st.session_state["_gps_first_load"] = True
 
-# ── Accept ?lat=...&lon=... URL params ──────────────────────────────────────
-# This is how the raw-HTML GPS button below feeds coordinates back into
-# Streamlit: the button runs navigator.geolocation in the browser, then
-# redirects to /?lat=X&lon=Y. Streamlit picks the params up here.
+# Accept ?lat=...&lon=... URL params (kept for desktop testing + bookmarks)
 _params = st.query_params
 if "lat" in _params and "lon" in _params and not st.session_state.gps_lat:
     try:
         st.session_state.gps_lat = float(_params["lat"])
         st.session_state.gps_lon = float(_params["lon"])
-        # Clear the params from the address bar so a refresh doesn't re-trigger
         st.query_params.clear()
     except Exception:
         pass
@@ -1126,9 +1111,7 @@ auto_lat = st.session_state.gps_lat
 auto_lon = st.session_state.gps_lon
 have_gps = (auto_lat != 0.0 and auto_lon != 0.0)
 
-# ── Where are you input row (always visible) ───────────────────────────────
-# Search runs the moment any location signal arrives — GPS coords, typed place,
-# or a refinement message from the expander below.
+# ── Where are you input row ────────────────────────────────────────────────
 _loc_col1, _loc_col2 = st.columns([3, 1])
 with _loc_col1:
     place_input = st.text_input(
@@ -1138,85 +1121,22 @@ with _loc_col1:
         label_visibility="collapsed",
     )
 with _loc_col2:
-    # ── GPS button via components.html iframe ──────────────────────────────
-    # Streamlit's markdown rendering strips inline event handlers and
-    # script tags placed inside columns. The reliable path is
-    # components.v1.html which renders the content in a sandboxed iframe
-    # with full JS execution. From inside the iframe we use
-    # window.top.location to redirect the parent page with ?lat&lon, and
-    # our query-param handler picks them up.
-    import streamlit.components.v1 as _components
-    _autofire_js = "true" if not have_gps else "false"
-    _components.html(f"""
-<!doctype html>
-<html><body style="margin:0;padding:0">
-<button id="gps-btn" style="width:100%;background:#DC2626;color:#FFFFFF;
-        border:none;border-radius:8px;padding:13px 0;font-size:15px;
-        font-weight:700;cursor:pointer;font-family:system-ui,sans-serif;
-        letter-spacing:0.3px">
-  📍 GPS
-</button>
-<script>
-(function () {{
-  const btn = document.getElementById('gps-btn');
-  function fire () {{
-    console.log('[GPS] firing');
-    if (btn) {{ btn.disabled = true; btn.innerText = '⏳ ...'; }}
-    navigator.geolocation.getCurrentPosition(
-      p => {{
-        console.log('[GPS] got', p.coords.latitude, p.coords.longitude);
-        // Iframe sandbox blocks parent navigation, so post a message —
-        // the parent listens for it and does window.location.replace.
-        // Streamlit may nest us under multiple iframe layers; post to
-        // every ancestor window we can reach.
-        const payload = {{
-          type: 'roadsos_gps',
-          lat: p.coords.latitude,
-          lon: p.coords.longitude,
-        }};
-        let posted = 0;
-        try {{ window.parent.postMessage(payload, '*'); posted++; }} catch (e) {{}}
-        try {{ window.top.postMessage(payload, '*'); posted++; }} catch (e) {{}}
-        // Walk up the frame chain too, in case parent != top != Streamlit
-        try {{
-          let w = window.parent;
-          for (let i = 0; i < 5 && w && w !== window.top; i++) {{
-            w.postMessage(payload, '*');
-            posted++;
-            w = w.parent;
-          }}
-        }} catch (e) {{}}
-        console.log('[GPS] posted to', posted, 'window(s)');
-      }},
-      e => {{
-        console.warn('[GPS] failed', e.code, e.message);
-        if (btn) {{ btn.disabled = false; btn.innerText = '📍 GPS'; }}
-        alert('GPS failed: ' + (e.message || 'permission denied')
-              + '. Type a place above instead.');
-      }},
-      {{ enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 }}
-    );
-  }}
-  btn.addEventListener('click', fire);
-  console.log('[GPS] handler attached (components iframe)');
-
-  // Auto-fire once per session — use the iframe's OWN sessionStorage
-  // (it's about:srcdoc origin, separate from the parent's storage)
-  try {{
-    if ({_autofire_js} && !sessionStorage.getItem('roadsos_gps_tried_v2')) {{
-      sessionStorage.setItem('roadsos_gps_tried_v2', '1');
-      console.log('[GPS auto-fire] triggering');
-      setTimeout(fire, 400);
-    }} else {{
-      console.log('[GPS auto-fire] skipped (autofire={_autofire_js}, already tried this session)');
-    }}
-  }} catch (e) {{
-    console.warn('[GPS auto-fire] error', e);
-  }}
-}})();
-</script>
-</body></html>
-""", height=55)
+    # streamlit-geolocation renders a small button that, on tap, prompts the
+    # browser for location and returns a dict with latitude/longitude. The
+    # component handles all the iframe communication via Streamlit's
+    # official protocol.
+    try:
+        from streamlit_geolocation import streamlit_geolocation
+        _loc = streamlit_geolocation()
+        if _loc and _loc.get("latitude") is not None and not have_gps:
+            st.session_state.gps_lat = float(_loc["latitude"])
+            st.session_state.gps_lon = float(_loc["longitude"])
+            auto_lat = st.session_state.gps_lat
+            auto_lon = st.session_state.gps_lon
+            have_gps = True
+            st.rerun()
+    except ImportError:
+        st.warning("Install `streamlit-geolocation` for one-tap GPS detection.")
 
 # ── Decide whether to run a search ─────────────────────────────────────────
 user_msg = st.session_state.get("refine_msg", "").strip()
