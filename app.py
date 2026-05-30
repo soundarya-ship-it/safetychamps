@@ -1126,45 +1126,33 @@ with _loc_col1:
         label_visibility="collapsed",
     )
 with _loc_col2:
-    # ── Raw HTML GPS button ────────────────────────────────────────────────
-    # Streamlit converts injected HTML to React elements and strips inline
-    # event handlers (onclick → React's onClick prop, fails with "string
-    # is not a function" — React error #231). So the button has NO inline
-    # handler. We attach the handler with addEventListener from the
-    # separate <script> below, polling until the button mounts.
-    st.markdown("""
-<button id="roadsos-gps-btn"
-        style="width:100%;background:#DC2626;color:#FFFFFF;border:none;
-               border-radius:8px;padding:13px 0;font-size:15px;font-weight:700;
-               cursor:pointer;font-family:system-ui,sans-serif;
-               letter-spacing:0.3px">
+    # ── GPS button via components.html iframe ──────────────────────────────
+    # Streamlit's markdown rendering strips inline event handlers and
+    # script tags placed inside columns. The reliable path is
+    # components.v1.html which renders the content in a sandboxed iframe
+    # with full JS execution. From inside the iframe we use
+    # window.top.location to redirect the parent page with ?lat&lon, and
+    # our query-param handler picks them up.
+    import streamlit.components.v1 as _components
+    _autofire_js = "true" if not have_gps else "false"
+    _components.html(f"""
+<!doctype html>
+<html><body style="margin:0;padding:0">
+<button id="gps-btn" style="width:100%;background:#DC2626;color:#FFFFFF;
+        border:none;border-radius:8px;padding:13px 0;font-size:15px;
+        font-weight:700;cursor:pointer;font-family:system-ui,sans-serif;
+        letter-spacing:0.3px">
   📍 GPS
 </button>
-""", unsafe_allow_html=True)
-
-# ── GPS handler + auto-fire — single script (always runs) ───────────────────
-# One <script> block defines window.roadsosFireGPS() and attaches it to the
-# button via addEventListener once it mounts. Auto-fire on first session.
-_autofire = "true" if not have_gps else "false"
-st.markdown(f"""
 <script>
 (function () {{
-  if (window.__roadsosGpsInit) return;
-  window.__roadsosGpsInit = true;
-
-  window.roadsosFireGPS = function (sourceBtn) {{
+  const btn = document.getElementById('gps-btn');
+  function fire () {{
     console.log('[GPS] firing');
-    if (!navigator.geolocation) {{
-      alert('Geolocation not supported by this browser');
-      return;
-    }}
-    if (sourceBtn) {{
-      sourceBtn.dataset.busy = '1';
-      sourceBtn.innerText = '⏳ ...';
-    }}
+    if (btn) {{ btn.disabled = true; btn.innerText = '⏳ ...'; }}
     navigator.geolocation.getCurrentPosition(
       p => {{
-        console.log('[GPS] got coords', p.coords.latitude, p.coords.longitude);
+        console.log('[GPS] got', p.coords.latitude, p.coords.longitude);
         const u = new URL(window.top.location.href);
         u.searchParams.set('lat', p.coords.latitude);
         u.searchParams.set('lon', p.coords.longitude);
@@ -1172,43 +1160,32 @@ st.markdown(f"""
       }},
       e => {{
         console.warn('[GPS] failed', e.code, e.message);
-        if (sourceBtn) {{
-          sourceBtn.dataset.busy = '';
-          sourceBtn.innerText = '📍 GPS';
-        }}
+        if (btn) {{ btn.disabled = false; btn.innerText = '📍 GPS'; }}
         alert('GPS failed: ' + (e.message || 'permission denied')
-              + '. Type a place name above instead.');
+              + '. Type a place above instead.');
       }},
       {{ enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 }}
     );
-  }};
+  }}
+  btn.addEventListener('click', fire);
+  console.log('[GPS] handler attached (components iframe)');
 
-  const attach = (tries) => {{
-    const btn = document.getElementById('roadsos-gps-btn');
-    if (btn) {{
-      if (!btn.dataset.bound) {{
-        btn.dataset.bound = '1';
-        btn.addEventListener('click', () => window.roadsosFireGPS(btn));
-        console.log('[GPS] handler attached');
-      }}
-      // Auto-fire if requested AND first time this session
-      if ({_autofire}
-          && !sessionStorage.getItem('roadsos_gps_tried')
-          && !new URL(window.top.location.href).searchParams.get('lat')) {{
-        sessionStorage.setItem('roadsos_gps_tried', '1');
-        console.log('[GPS auto-fire] triggering');
-        window.roadsosFireGPS(btn);
-      }}
-    }} else if ((tries || 0) < 40) {{
-      setTimeout(() => attach((tries || 0) + 1), 100);
-    }} else {{
-      console.warn('[GPS] button never appeared after 4s');
+  // Auto-fire once per session
+  try {{
+    if ({_autofire_js}
+        && !window.top.sessionStorage.getItem('roadsos_gps_tried')
+        && !new URL(window.top.location.href).searchParams.get('lat')) {{
+      window.top.sessionStorage.setItem('roadsos_gps_tried', '1');
+      console.log('[GPS auto-fire] triggering');
+      setTimeout(fire, 400);
     }}
-  }};
-  setTimeout(() => attach(0), 200);
+  }} catch (e) {{
+    console.warn('[GPS auto-fire] error', e);
+  }}
 }})();
 </script>
-""", unsafe_allow_html=True)
+</body></html>
+""", height=55)
 
 # ── Decide whether to run a search ─────────────────────────────────────────
 user_msg = st.session_state.get("refine_msg", "").strip()
