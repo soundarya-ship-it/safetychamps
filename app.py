@@ -1126,25 +1126,31 @@ with _loc_col1:
         label_visibility="collapsed",
     )
 with _loc_col2:
-    # ── Raw HTML GPS button — no streamlit-js-eval dependency ──
-    # streamlit-js-eval was silently failing for us. The native
-    # navigator.geolocation API works reliably, so we use it directly:
-    # the button runs getCurrentPosition, then redirects with lat/lon
-    # in the URL. Our query-param handler above picks them up on the
-    # next page render.
-    st.html("""
+    # ── Raw HTML GPS button ────────────────────────────────────────────────
+    # We use st.markdown(unsafe_allow_html=True) instead of st.html() because
+    # st.html() can render inside a sandboxed iframe where the geolocation
+    # API + window.location redirect both fail silently. st.markdown injects
+    # directly into the main page DOM — same path the PWA bootstrap script
+    # uses to register the service worker successfully.
+    #
+    # window.top.location is used instead of window.location so the redirect
+    # works even if we end up nested inside a frame for any reason.
+    st.markdown("""
 <button id="roadsos-gps-btn" onclick="
+  console.log('[GPS] button clicked');
   if (this.dataset.busy) return;
   this.dataset.busy = '1';
   this.innerText = '⏳ ...';
   navigator.geolocation.getCurrentPosition(
     p => {
-      const u = new URL(window.location.href);
+      console.log('[GPS] got coords', p.coords.latitude, p.coords.longitude);
+      const u = new URL(window.top.location.href);
       u.searchParams.set('lat', p.coords.latitude);
       u.searchParams.set('lon', p.coords.longitude);
-      window.location.replace(u.toString());
+      window.top.location.replace(u.toString());
     },
     e => {
+      console.warn('[GPS] failed', e.code, e.message);
       this.dataset.busy = '';
       this.innerText = '📍 GPS';
       alert('GPS failed: ' + (e.message || 'permission denied') + '. Type a place above instead.');
@@ -1156,36 +1162,44 @@ with _loc_col2:
          cursor:pointer;font-family:system-ui,sans-serif;letter-spacing:0.3px">
   📍 GPS
 </button>
-""")
+""", unsafe_allow_html=True)
 
 # ── Auto-fire GPS once per session (Chrome/Edge/Firefox; iOS Safari ignores) ──
 # Runs ONLY if: no coords yet AND no URL params already AND not tried this
-# session. On the first page load, the script clicks the GPS button for the
-# user. iOS Safari blocks programmatic clicks → user taps the button manually.
+# session. We poll for the GPS button to appear (Streamlit renders it
+# slightly after this script runs), then click it programmatically.
 if not have_gps:
-    st.html("""
+    st.markdown("""
 <script>
 (function () {
   try {
-    if (sessionStorage.getItem('roadsos_gps_tried')) return;
-    if (new URL(window.location.href).searchParams.get('lat')) return;
+    if (sessionStorage.getItem('roadsos_gps_tried')) {
+      console.log('[GPS auto-fire] already tried this session, skipping');
+      return;
+    }
+    if (new URL(window.top.location.href).searchParams.get('lat')) {
+      console.log('[GPS auto-fire] coords already in URL, skipping');
+      return;
+    }
     sessionStorage.setItem('roadsos_gps_tried', '1');
-    // Fire as soon as the GPS button exists in DOM. We poll briefly because
-    // Streamlit renders the button slightly after this script runs.
+    console.log('[GPS auto-fire] scheduling button click');
     let tries = 0;
     const fire = () => {
       const btn = document.getElementById('roadsos-gps-btn');
       if (btn) {
+        console.log('[GPS auto-fire] button found, clicking');
         btn.click();
       } else if (++tries < 40) {
         setTimeout(fire, 100);
+      } else {
+        console.warn('[GPS auto-fire] button never appeared after 4s');
       }
     };
-    setTimeout(fire, 250);
-  } catch (e) { console.warn('[GPS auto-fire]', e); }
+    setTimeout(fire, 300);
+  } catch (e) { console.warn('[GPS auto-fire] error:', e); }
 })();
 </script>
-""")
+""", unsafe_allow_html=True)
 
 # ── Decide whether to run a search ─────────────────────────────────────────
 user_msg = st.session_state.get("refine_msg", "").strip()
