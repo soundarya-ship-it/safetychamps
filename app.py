@@ -1251,7 +1251,7 @@ if should_search:
         urgency = intent.get("urgency", "high")
         urgency_dot = {"critical":"🔴","high":"🟠","medium":"🟡","low":"🟢"}.get(urgency, "🟠")
         gh_color = {"green":"#16A34A","amber":"#D97706","red":"#DC2626"}.get(gh["status"], "#4B5563") if gh else "#4B5563"
-        eta_line = f"<span style=\"color:{gh_color}\">{gh['icon']} ~{gh['eta_min']} min to nearest hospital</span>" if gh else ""
+        eta_line = f"<span style=\"color:{gh_color}\">{gh['icon']} ~{gh['eta']} min to nearest hospital</span>" if gh else ""
 
         st.markdown(
             f'<div style="background:#F8FAFC;border:1px solid #E2E8F0;'
