@@ -13,18 +13,28 @@ from datetime import datetime
 sys.path.insert(0, os.path.dirname(__file__))
 
 # ── PWA workaround: extend Streamlit's allowed static-file extensions ─────────
-# Streamlit's AppStaticFileHandler forces "text/plain" on every file whose
-# extension isn't in a short hardcoded list. That breaks the PWA setup —
-# the manifest needs application/json, the service worker needs
-# application/javascript, and emergency.html needs text/html or browsers
-# render it as raw source. The fix is a one-line monkey-patch BEFORE we
-# import streamlit so the static handler sees our extended list.
-import streamlit.web.server.app_static_file_handler as _ash
-_ash.SAFE_APP_STATIC_FILE_EXTENSIONS = (
-    ".jpg", ".jpeg", ".png", ".pdf", ".gif", ".webp",   # Streamlit defaults
-    ".js", ".json", ".html", ".css", ".webmanifest",    # for the PWA
-    ".ico", ".svg", ".txt",                              # nice-to-haves
-)
+# Streamlit ≤1.39 had a hardcoded SAFE_APP_STATIC_FILE_EXTENSIONS tuple in
+# streamlit.web.server.app_static_file_handler that forced "text/plain" on
+# every file whose extension wasn't in the list. That broke our PWA setup
+# (manifest needs application/json, service worker needs
+# application/javascript, emergency.html needs text/html or browsers
+# render it as raw source).
+#
+# In Streamlit 1.50+ this module was restructured. We try to apply the
+# patch but silently skip on newer versions — they typically have better
+# MIME handling out of the box, and the worst case is that the PWA install
+# / offline page work less reliably (the main app is unaffected).
+try:
+    import streamlit.web.server.app_static_file_handler as _ash
+    _ash.SAFE_APP_STATIC_FILE_EXTENSIONS = (
+        ".jpg", ".jpeg", ".png", ".pdf", ".gif", ".webp",   # Streamlit defaults
+        ".js", ".json", ".html", ".css", ".webmanifest",    # for the PWA
+        ".ico", ".svg", ".txt",                              # nice-to-haves
+    )
+except (ImportError, AttributeError):
+    # Newer Streamlit (≥1.50) — module was restructured. Skip the patch;
+    # the app starts up normally without it.
+    pass
 
 import streamlit as st
 import requests as http
