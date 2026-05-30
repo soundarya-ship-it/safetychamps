@@ -12,6 +12,20 @@ import os, sys, sqlite3, math, re, json, urllib.parse
 from datetime import datetime
 sys.path.insert(0, os.path.dirname(__file__))
 
+# ── PWA workaround: extend Streamlit's allowed static-file extensions ─────────
+# Streamlit's AppStaticFileHandler forces "text/plain" on every file whose
+# extension isn't in a short hardcoded list. That breaks the PWA setup —
+# the manifest needs application/json, the service worker needs
+# application/javascript, and emergency.html needs text/html or browsers
+# render it as raw source. The fix is a one-line monkey-patch BEFORE we
+# import streamlit so the static handler sees our extended list.
+import streamlit.web.server.app_static_file_handler as _ash
+_ash.SAFE_APP_STATIC_FILE_EXTENSIONS = (
+    ".jpg", ".jpeg", ".png", ".pdf", ".gif", ".webp",   # Streamlit defaults
+    ".js", ".json", ".html", ".css", ".webmanifest",    # for the PWA
+    ".ico", ".svg", ".txt",                              # nice-to-haves
+)
+
 import streamlit as st
 import requests as http
 
@@ -46,6 +60,55 @@ st.set_page_config(
     page_icon="🚨",
     layout="centered",
     initial_sidebar_state="collapsed",
+)
+
+# ── PWA setup ─────────────────────────────────────────────────────────────────
+# Streamlit injects our HTML inside <body> after React mounts. Browsers,
+# especially iOS Safari, expect PWA <link>/<meta> tags inside <head>. So we
+# inject a small bootstrap script that creates the tags and moves them into
+# <head> at load time. Also registers the service worker.
+st.markdown(
+    """
+<script>
+(function () {
+  const HEAD = document.head;
+  const ensure = (selector, factory) => {
+    if (!HEAD.querySelector(selector)) HEAD.appendChild(factory());
+  };
+  const mkLink = (rel, href, extra = {}) => {
+    const l = document.createElement('link');
+    l.rel = rel; l.href = href;
+    for (const [k, v] of Object.entries(extra)) l.setAttribute(k, v);
+    return l;
+  };
+  const mkMeta = (name, content) => {
+    const m = document.createElement('meta');
+    m.setAttribute('name', name); m.setAttribute('content', content);
+    return m;
+  };
+  // Manifest
+  ensure('link[rel="manifest"]', () => mkLink('manifest', '/app/static/manifest.json'));
+  // Icons
+  ensure('link[rel="icon"]',           () => mkLink('icon',            '/app/static/icons/favicon.png',     { type: 'image/png', sizes: '32x32' }));
+  ensure('link[rel="apple-touch-icon"]',() => mkLink('apple-touch-icon','/app/static/icons/icon-192.png'));
+  // Theme + PWA meta tags
+  ensure('meta[name="theme-color"]',                       () => mkMeta('theme-color', '#dc2626'));
+  ensure('meta[name="mobile-web-app-capable"]',            () => mkMeta('mobile-web-app-capable', 'yes'));
+  ensure('meta[name="apple-mobile-web-app-capable"]',      () => mkMeta('apple-mobile-web-app-capable', 'yes'));
+  ensure('meta[name="apple-mobile-web-app-status-bar-style"]',
+                                                            () => mkMeta('apple-mobile-web-app-status-bar-style', 'black-translucent'));
+  ensure('meta[name="apple-mobile-web-app-title"]',        () => mkMeta('apple-mobile-web-app-title', 'RoadSoS'));
+  // Service worker — registers from root scope so it controls all pages
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker
+      .register('/app/static/sw.js', { scope: '/' })
+      .then((r) => console.log('[PWA] SW registered, scope:', r.scope))
+      .catch((e) => console.warn('[PWA] SW registration failed:', e));
+  }
+})();
+</script>
+""",
+    unsafe_allow_html=True,
 )
 
 # ── Lazy imports (handle missing packages gracefully) ─────────────────────────
@@ -738,6 +801,14 @@ st.html("""
 <div style="font-size:13px;color:#9CA3AF;text-align:center;margin-top:6px;font-family:system-ui,sans-serif">
   Tap to call immediately &bull; Works offline &bull; 24×7 anywhere in India
 </div>
+<a href="/app/static/emergency.html" target="_blank"
+   style="display:block;margin-top:8px;background:#1E3A5F;color:#FFFFFF;
+          border-radius:10px;padding:11px;text-align:center;text-decoration:none;
+          font-family:system-ui,sans-serif;font-size:14px;font-weight:700;
+          letter-spacing:0.3px">
+  📱 Open Offline Emergency Mode &nbsp;·&nbsp;
+  <span style="opacity:0.85;font-weight:400">3,606 contacts cached on-device</span>
+</a>
 """)
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
