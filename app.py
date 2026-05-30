@@ -105,29 +105,17 @@ st.markdown(
       .then((r) => console.log('[PWA] SW registered, scope:', r.scope))
       .catch((e) => console.warn('[PWA] SW registration failed:', e));
   }
-  // ── GPS bridge — iframe can't navigate the parent (sandbox blocks
-  // allow-top-navigation), so the GPS button's iframe posts a message
-  // and we (the parent) do the redirect here. ────────────────────────────
-  if (!window.__roadsosGpsBridge) {
-    window.__roadsosGpsBridge = true;
-    console.log('[GPS bridge] listener installed on', window.location.href);
-    window.addEventListener('message', (ev) => {
-      // Log EVERY message we receive so we can see if it's arriving at all
-      const dt = ev.data;
-      if (dt && (dt.type === 'roadsos_gps' || dt.roadsos_gps)) {
-        const lat = dt.lat || (dt.roadsos_gps && dt.roadsos_gps.lat);
-        const lon = dt.lon || (dt.roadsos_gps && dt.roadsos_gps.lon);
-        console.log('[GPS bridge] received', lat, lon, 'origin:', ev.origin);
-        try {
-          const u = new URL(window.location.href);
-          u.searchParams.set('lat', lat);
-          u.searchParams.set('lon', lon);
-          window.location.replace(u.toString());
-        } catch (e) {
-          console.warn('[GPS bridge] redirect failed', e);
-        }
-      }
-    });
+  // ── GPS bridge — loaded as external script so React doesn't strip it.
+  // The bridge listens for postMessage from the GPS button's iframe
+  // (which can't navigate the parent directly due to sandbox) and
+  // does the actual window.location.replace(?lat&lon) redirect. ──────────
+  if (!document.querySelector('script[data-roadsos-bridge]')) {
+    const _s = document.createElement('script');
+    _s.src = '/app/static/bridge.js';
+    _s.setAttribute('data-roadsos-bridge', '1');
+    _s.async = false;
+    document.head.appendChild(_s);
+    console.log('[PWA bootstrap] bridge script appended');
   }
   // ── Offline-first redirect ────────────────────────────────────────────
   // Streamlit's interactivity requires a live websocket. If the device is
