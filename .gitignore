@@ -6,6 +6,8 @@
 roadsos.db
 roadsos.db-journal
 *.db-journal
+*.db.bak
+*.bak
 
 # Python
 __pycache__/
