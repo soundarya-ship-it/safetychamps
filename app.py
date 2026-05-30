@@ -593,7 +593,15 @@ def group_contacts(contacts, urgency="high"):
 
 
 def render_contact_card(c, faded=False):
-    """Single contact card. Factored out so grouped sections can reuse it."""
+    """
+    Single contact card, rendered flat (no expander wrapper).
+
+    The old version wrapped the card in st.expander(), which crashed when
+    the grouped renderer placed cards inside a "Show more" expander
+    (Streamlit doesn't allow nested expanders). Going flat is also
+    better UX — in an emergency, the user shouldn't have to tap a
+    disclosure widget to see the phone number.
+    """
     t = get_T()
     icon  = CATEGORY_ICONS.get(c.get("category", "other"), "[!]")
     conf  = c.get("confidence", 50)
@@ -601,16 +609,22 @@ def render_contact_card(c, faded=False):
     phone = c.get("phone") or "--"
     dist  = c.get("distance_km", "?")
     tier_label = {1: "National", 2: "Verified", 3: "Local"}.get(c.get("tier", 3), "Local")
+    fade_prefix = "⚠️ " if faded else ""
 
-    title = f"{icon} **{c['name']}** - {dist} km | {badge_icon} {badge_text} | {tier_label}"
-    if faded:
-        title = "⚠️ " + title
+    # Each card lives in a bordered container so the layout stays visually
+    # separated without using expanders.
+    with st.container(border=True):
+        # Header line
+        st.markdown(
+            f"{fade_prefix}{icon} **{c['name']}** &nbsp;·&nbsp; "
+            f"{dist} km &nbsp;·&nbsp; {badge_icon} {badge_text} "
+            f"&nbsp;·&nbsp; {tier_label}",
+            unsafe_allow_html=True,
+        )
 
-    with st.expander(title, expanded=(not faded and (conf >= 80 or c.get("tier", 3) <= 2))):
         col_a, col_b, col_c = st.columns([2, 2, 1])
         with col_a:
             if phone and phone != "--":
-                # Make the phone number tap-to-call on mobile
                 phone_clean = urllib.parse.quote(phone)
                 st.markdown(
                     f'<a href="tel:{phone_clean}" style="text-decoration:none">'
