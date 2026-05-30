@@ -314,14 +314,16 @@ def seed_blood_banks(conn):
 if __name__ == "__main__":
     from database.seed_districts import seed_districts
     from database.seed_specialty_hospitals import seed_specialty_hospitals
+    from database.seed_nhp_hospitals import seed_nhp_hospitals
     conn = init_db()
     seed_national_numbers(conn)
     seed_tier2_contacts(conn)
     seed_roadside_services(conn)
     seed_trauma_centres(conn)
     seed_blood_banks(conn)
-    seed_districts(conn)
     seed_specialty_hospitals(conn)
+    seed_nhp_hospitals(conn)    # 800–1900 real hospitals from data.gov.in
+    seed_districts(conn)        # fallback last — fills districts NHP missed
     conn.close()
     # Run phonenumbers verification on all seeded contacts
     try:
