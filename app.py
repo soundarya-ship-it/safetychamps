@@ -105,6 +105,21 @@ st.markdown(
       .then((r) => console.log('[PWA] SW registered, scope:', r.scope))
       .catch((e) => console.warn('[PWA] SW registration failed:', e));
   }
+  // ── GPS bridge — iframe can't navigate the parent (sandbox blocks
+  // allow-top-navigation), so the GPS button's iframe posts a message
+  // and we (the parent) do the redirect here. ────────────────────────────
+  window.addEventListener('message', (ev) => {
+    if (!ev.data || ev.data.type !== 'roadsos_gps') return;
+    try {
+      console.log('[GPS bridge] received', ev.data.lat, ev.data.lon);
+      const u = new URL(window.location.href);
+      u.searchParams.set('lat', ev.data.lat);
+      u.searchParams.set('lon', ev.data.lon);
+      window.location.replace(u.toString());
+    } catch (e) {
+      console.warn('[GPS bridge] redirect failed', e);
+    }
+  });
   // ── Offline-first redirect ────────────────────────────────────────────
   // Streamlit's interactivity requires a live websocket. If the device is
   // offline at first load, the page would render but every interaction
@@ -1153,10 +1168,18 @@ with _loc_col2:
     navigator.geolocation.getCurrentPosition(
       p => {{
         console.log('[GPS] got', p.coords.latitude, p.coords.longitude);
-        const u = new URL(window.top.location.href);
-        u.searchParams.set('lat', p.coords.latitude);
-        u.searchParams.set('lon', p.coords.longitude);
-        window.top.location.replace(u.toString());
+        // Iframe sandbox blocks parent navigation, so post a message —
+        // the parent listens for it and does window.location.replace.
+        try {{
+          window.parent.postMessage({{
+            type: 'roadsos_gps',
+            lat: p.coords.latitude,
+            lon: p.coords.longitude,
+          }}, '*');
+          console.log('[GPS] posted to parent');
+        }} catch (e) {{
+          console.warn('[GPS] postMessage failed', e);
+        }}
       }},
       e => {{
         console.warn('[GPS] failed', e.code, e.message);
@@ -1170,14 +1193,15 @@ with _loc_col2:
   btn.addEventListener('click', fire);
   console.log('[GPS] handler attached (components iframe)');
 
-  // Auto-fire once per session
+  // Auto-fire once per session — use the iframe's OWN sessionStorage
+  // (it's about:srcdoc origin, separate from the parent's storage)
   try {{
-    if ({_autofire_js}
-        && !window.top.sessionStorage.getItem('roadsos_gps_tried')
-        && !new URL(window.top.location.href).searchParams.get('lat')) {{
-      window.top.sessionStorage.setItem('roadsos_gps_tried', '1');
+    if ({_autofire_js} && !sessionStorage.getItem('roadsos_gps_tried_v2')) {{
+      sessionStorage.setItem('roadsos_gps_tried_v2', '1');
       console.log('[GPS auto-fire] triggering');
       setTimeout(fire, 400);
+    }} else {{
+      console.log('[GPS auto-fire] skipped (autofire={_autofire_js}, already tried this session)');
     }}
   }} catch (e) {{
     console.warn('[GPS auto-fire] error', e);
