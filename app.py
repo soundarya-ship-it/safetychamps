@@ -108,18 +108,27 @@ st.markdown(
   // ── GPS bridge — iframe can't navigate the parent (sandbox blocks
   // allow-top-navigation), so the GPS button's iframe posts a message
   // and we (the parent) do the redirect here. ────────────────────────────
-  window.addEventListener('message', (ev) => {
-    if (!ev.data || ev.data.type !== 'roadsos_gps') return;
-    try {
-      console.log('[GPS bridge] received', ev.data.lat, ev.data.lon);
-      const u = new URL(window.location.href);
-      u.searchParams.set('lat', ev.data.lat);
-      u.searchParams.set('lon', ev.data.lon);
-      window.location.replace(u.toString());
-    } catch (e) {
-      console.warn('[GPS bridge] redirect failed', e);
-    }
-  });
+  if (!window.__roadsosGpsBridge) {
+    window.__roadsosGpsBridge = true;
+    console.log('[GPS bridge] listener installed on', window.location.href);
+    window.addEventListener('message', (ev) => {
+      // Log EVERY message we receive so we can see if it's arriving at all
+      const dt = ev.data;
+      if (dt && (dt.type === 'roadsos_gps' || dt.roadsos_gps)) {
+        const lat = dt.lat || (dt.roadsos_gps && dt.roadsos_gps.lat);
+        const lon = dt.lon || (dt.roadsos_gps && dt.roadsos_gps.lon);
+        console.log('[GPS bridge] received', lat, lon, 'origin:', ev.origin);
+        try {
+          const u = new URL(window.location.href);
+          u.searchParams.set('lat', lat);
+          u.searchParams.set('lon', lon);
+          window.location.replace(u.toString());
+        } catch (e) {
+          console.warn('[GPS bridge] redirect failed', e);
+        }
+      }
+    });
+  }
   // ── Offline-first redirect ────────────────────────────────────────────
   // Streamlit's interactivity requires a live websocket. If the device is
   // offline at first load, the page would render but every interaction
@@ -1170,16 +1179,26 @@ with _loc_col2:
         console.log('[GPS] got', p.coords.latitude, p.coords.longitude);
         // Iframe sandbox blocks parent navigation, so post a message —
         // the parent listens for it and does window.location.replace.
+        // Streamlit may nest us under multiple iframe layers; post to
+        // every ancestor window we can reach.
+        const payload = {{
+          type: 'roadsos_gps',
+          lat: p.coords.latitude,
+          lon: p.coords.longitude,
+        }};
+        let posted = 0;
+        try {{ window.parent.postMessage(payload, '*'); posted++; }} catch (e) {{}}
+        try {{ window.top.postMessage(payload, '*'); posted++; }} catch (e) {{}}
+        // Walk up the frame chain too, in case parent != top != Streamlit
         try {{
-          window.parent.postMessage({{
-            type: 'roadsos_gps',
-            lat: p.coords.latitude,
-            lon: p.coords.longitude,
-          }}, '*');
-          console.log('[GPS] posted to parent');
-        }} catch (e) {{
-          console.warn('[GPS] postMessage failed', e);
-        }}
+          let w = window.parent;
+          for (let i = 0; i < 5 && w && w !== window.top; i++) {{
+            w.postMessage(payload, '*');
+            posted++;
+            w = w.parent;
+          }}
+        }} catch (e) {{}}
+        console.log('[GPS] posted to', posted, 'window(s)');
       }},
       e => {{
         console.warn('[GPS] failed', e.code, e.message);
