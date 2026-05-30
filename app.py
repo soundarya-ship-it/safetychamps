@@ -1399,8 +1399,19 @@ with st.expander("💬 Tell us what happened (optional — helps prioritise)", e
         st.session_state["refine_msg"] = _new_msg
         st.rerun()
 
-# ── First Aid (always available, but collapsed) ─────────────────────────────
-with st.expander("🩺 First aid & golden hour guide (offline · 5 languages)", expanded=False):
+# ── First Aid (toggleable — render_first_aid uses its own expanders, so we
+# can't wrap it inside another st.expander; Streamlit forbids nesting) ──────
+if "show_first_aid" not in st.session_state:
+    st.session_state["show_first_aid"] = False
+
+_fa_label = ("🩺 Hide first aid guide"
+             if st.session_state["show_first_aid"]
+             else "🩺 First aid & golden hour guide (offline · 5 languages)")
+if st.button(_fa_label, use_container_width=True, key="fa_toggle"):
+    st.session_state["show_first_aid"] = not st.session_state["show_first_aid"]
+    st.rerun()
+
+if st.session_state["show_first_aid"]:
     _intent_for_aid = st.session_state.get("last_intent", None)
     render_first_aid(
         user_msg=st.session_state.get("refine_msg", ""),
