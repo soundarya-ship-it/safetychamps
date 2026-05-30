@@ -12,6 +12,20 @@ import os, sys, sqlite3, math, re, json, urllib.parse
 from datetime import datetime
 sys.path.insert(0, os.path.dirname(__file__))
 
+# ── PWA workaround: extend Streamlit's allowed static-file extensions ─────────
+# Streamlit's AppStaticFileHandler forces "text/plain" on every file whose
+# extension isn't in a short hardcoded list. That breaks the PWA setup —
+# the manifest needs application/json, the service worker needs
+# application/javascript, and emergency.html needs text/html or browsers
+# render it as raw source. The fix is a one-line monkey-patch BEFORE we
+# import streamlit so the static handler sees our extended list.
+import streamlit.web.server.app_static_file_handler as _ash
+_ash.SAFE_APP_STATIC_FILE_EXTENSIONS = (
+    ".jpg", ".jpeg", ".png", ".pdf", ".gif", ".webp",   # Streamlit defaults
+    ".js", ".json", ".html", ".css", ".webmanifest",    # for the PWA
+    ".ico", ".svg", ".txt",                              # nice-to-haves
+)
+
 import streamlit as st
 import requests as http
 
@@ -48,6 +62,69 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
+# ── PWA setup ─────────────────────────────────────────────────────────────────
+# Streamlit injects our HTML inside <body> after React mounts. Browsers,
+# especially iOS Safari, expect PWA <link>/<meta> tags inside <head>. So we
+# inject a small bootstrap script that creates the tags and moves them into
+# <head> at load time. Also registers the service worker.
+st.markdown(
+    """
+<script>
+(function () {
+  const HEAD = document.head;
+  const ensure = (selector, factory) => {
+    if (!HEAD.querySelector(selector)) HEAD.appendChild(factory());
+  };
+  const mkLink = (rel, href, extra = {}) => {
+    const l = document.createElement('link');
+    l.rel = rel; l.href = href;
+    for (const [k, v] of Object.entries(extra)) l.setAttribute(k, v);
+    return l;
+  };
+  const mkMeta = (name, content) => {
+    const m = document.createElement('meta');
+    m.setAttribute('name', name); m.setAttribute('content', content);
+    return m;
+  };
+  // Manifest
+  ensure('link[rel="manifest"]', () => mkLink('manifest', '/app/static/manifest.json'));
+  // Icons
+  ensure('link[rel="icon"]',           () => mkLink('icon',            '/app/static/icons/favicon.png',     { type: 'image/png', sizes: '32x32' }));
+  ensure('link[rel="apple-touch-icon"]',() => mkLink('apple-touch-icon','/app/static/icons/icon-192.png'));
+  // Theme + PWA meta tags
+  ensure('meta[name="theme-color"]',                       () => mkMeta('theme-color', '#dc2626'));
+  ensure('meta[name="mobile-web-app-capable"]',            () => mkMeta('mobile-web-app-capable', 'yes'));
+  ensure('meta[name="apple-mobile-web-app-capable"]',      () => mkMeta('apple-mobile-web-app-capable', 'yes'));
+  ensure('meta[name="apple-mobile-web-app-status-bar-style"]',
+                                                            () => mkMeta('apple-mobile-web-app-status-bar-style', 'black-translucent'));
+  ensure('meta[name="apple-mobile-web-app-title"]',        () => mkMeta('apple-mobile-web-app-title', 'RoadSoS'));
+  // Service worker — registers from root scope so it controls all pages
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker
+      .register('/app/static/sw.js', { scope: '/' })
+      .then((r) => console.log('[PWA] SW registered, scope:', r.scope))
+      .catch((e) => console.warn('[PWA] SW registration failed:', e));
+  }
+  // GPS now goes through streamlit-geolocation (a proper declared
+  // Streamlit component) which handles parent↔iframe communication
+  // via Streamlit's official protocol. No bridge needed.
+  // ── Offline-first redirect ────────────────────────────────────────────
+  // Streamlit's interactivity requires a live websocket. If the device is
+  // offline at first load, the page would render but every interaction
+  // would hang. Instead, redirect to /app/static/emergency.html which is
+  // a fully self-contained offline page (cached by the service worker on
+  // first visit). The redirect is one-shot: once online, the main app
+  // works as normal.
+  if (!navigator.onLine && !sessionStorage.getItem('roadsos_skip_offline_redirect')) {
+    sessionStorage.setItem('roadsos_skip_offline_redirect', '1');
+    window.location.replace('/app/static/emergency.html');
+  }
+})();
+</script>
+""",
+    unsafe_allow_html=True,
+)
+
 # ── Lazy imports (handle missing packages gracefully) ─────────────────────────
 try:
     from groq import Groq
@@ -55,12 +132,30 @@ try:
 except ImportError:
     GROQ_AVAILABLE = False
 
-# ── API keys: check st.secrets (Streamlit Cloud) then os.environ (.env) ──────
+# ── API keys: check os.environ first, then st.secrets (Streamlit Cloud) ──────
+# Note: touching st.secrets[...] renders a "No secrets found" warning widget
+# when no secrets.toml exists — and our try/except doesn't suppress that side
+# effect. So we only touch st.secrets when we know a secrets.toml is present.
+_SECRETS_PATHS = (
+    os.path.join(os.path.dirname(__file__), ".streamlit", "secrets.toml"),
+    os.path.expanduser("~/.streamlit/secrets.toml"),
+)
+_SECRETS_PRESENT = any(os.path.exists(p) for p in _SECRETS_PATHS)
+
+
 def _get_secret(key):
-    try:
-        return st.secrets[key]
-    except Exception:
-        return os.environ.get(key, "")
+    # 1. Environment variable (local .env, Docker, generic deploy)
+    v = os.environ.get(key, "")
+    if v:
+        return v
+    # 2. Streamlit secrets — only checked when a secrets.toml actually exists,
+    #    otherwise st.secrets prints a warning we can't suppress.
+    if _SECRETS_PRESENT:
+        try:
+            return st.secrets.get(key, "") or ""
+        except Exception:
+            pass
+    return ""
 
 # ── DB path + auto-init ───────────────────────────────────────────────────────
 DB_PATH = os.path.join(os.path.dirname(__file__), "roadsos.db")
@@ -439,6 +534,181 @@ def record_feedback(contact_id, worked):
     conn.commit(); conn.close()
 
 
+# ── Category grouping + filter-then-sort ──────────────────────────────────────
+# Search results used to be a single mixed list sorted by tier+confidence+distance.
+# In an emergency that's hard to scan — the user is looking for one specific kind
+# of help. We group contacts into 3 sections (Medical / Safety / Vehicle), filter
+# out low-confidence numbers so users don't waste time dialling dead lines, and
+# sort by distance within each group. Trauma centres get a 2 km "boost" inside
+# Medical for critical cases — a verified trauma centre 10 km away is usually
+# better than a generic clinic 9 km away when minutes matter.
+
+CATEGORY_GROUPS = [
+    {
+        "key":   "medical",
+        "title": "🏥 Medical",
+        "categories": [
+            "trauma", "specialty_hospital", "neuro_spinal",
+            "burn_centre", "paediatric_trauma", "ortho_trauma",
+            "hospital", "blood_bank", "ambulance",
+        ],
+        "specialty_categories": [
+            "trauma", "specialty_hospital", "neuro_spinal",
+            "burn_centre", "paediatric_trauma",
+        ],
+    },
+    {
+        "key":   "safety",
+        "title": "🚔 Safety",
+        "categories": ["police", "fire"],
+        "specialty_categories": [],
+    },
+    {
+        "key":   "vehicle",
+        "title": "🚛 Vehicle & Roadside",
+        "categories": [
+            "towing", "highway_helpline", "puncture", "pharmacy", "fuel",
+        ],
+        "specialty_categories": [],
+    },
+]
+
+CONFIDENCE_FLOOR = 50   # contacts below this get hidden behind an expander
+
+
+def group_contacts(contacts, urgency="high"):
+    """
+    Split a flat contact list into the three display sections, sort each by
+    distance, and partition into "visible" (above floor) and "hidden" lists.
+
+    For critical/high urgency, specialty-medical categories get a 2 km
+    distance bonus so trauma centres are likely to surface above generic
+    hospitals when seconds matter.
+    """
+    is_critical = urgency in ("critical", "high")
+    out = {}
+    for group in CATEGORY_GROUPS:
+        members = [c for c in contacts if c.get("category") in group["categories"]]
+
+        for c in members:
+            base = c.get("distance_km") if c.get("distance_km") is not None else 999
+            boost = 2 if (is_critical and c.get("category") in group["specialty_categories"]) else 0
+            c["_sort_distance"] = max(0, base - boost)
+
+        members.sort(key=lambda c: c["_sort_distance"])
+
+        floor = CONFIDENCE_FLOOR
+        out[group["key"]] = {
+            "title":   group["title"],
+            "visible": [c for c in members if c.get("confidence", 0) >= floor],
+            "hidden":  [c for c in members if c.get("confidence", 0) <  floor],
+        }
+    return out
+
+
+def render_contact_card(c, faded=False):
+    """
+    Single contact card, rendered flat (no expander wrapper).
+
+    The old version wrapped the card in st.expander(), which crashed when
+    the grouped renderer placed cards inside a "Show more" expander
+    (Streamlit doesn't allow nested expanders). Going flat is also
+    better UX — in an emergency, the user shouldn't have to tap a
+    disclosure widget to see the phone number.
+    """
+    t = get_T()
+    icon  = CATEGORY_ICONS.get(c.get("category", "other"), "[!]")
+    conf  = c.get("confidence", 50)
+    badge_icon, badge_text, _ = confidence_badge(conf)
+    phone = c.get("phone") or "--"
+    dist  = c.get("distance_km", "?")
+    tier_label = {1: "National", 2: "Verified", 3: "Local"}.get(c.get("tier", 3), "Local")
+    fade_prefix = "⚠️ " if faded else ""
+
+    # Each card lives in a bordered container so the layout stays visually
+    # separated without using expanders.
+    with st.container(border=True):
+        # Header line
+        st.markdown(
+            f"{fade_prefix}{icon} **{c['name']}** &nbsp;·&nbsp; "
+            f"{dist} km &nbsp;·&nbsp; {badge_icon} {badge_text} "
+            f"&nbsp;·&nbsp; {tier_label}",
+            unsafe_allow_html=True,
+        )
+
+        col_a, col_b, col_c = st.columns([2, 2, 1])
+        with col_a:
+            if phone and phone != "--":
+                phone_clean = urllib.parse.quote(phone)
+                st.markdown(
+                    f'<a href="tel:{phone_clean}" style="text-decoration:none">'
+                    f'<p class="big-phone" style="margin:0">{phone}</p></a>',
+                    unsafe_allow_html=True,
+                )
+                badge_html = get_badge_html(phone, c.get("country_code", "IN"))
+                if badge_html:
+                    st.markdown(badge_html, unsafe_allow_html=True)
+                if c.get("phone_alt"):
+                    alt_clean = urllib.parse.quote(c["phone_alt"])
+                    st.markdown(
+                        f'Alt: <a href="tel:{alt_clean}">**{c["phone_alt"]}**</a>',
+                        unsafe_allow_html=True,
+                    )
+            else:
+                st.warning(t["no_phone"])
+            if c.get("address"):
+                st.caption(f"Addr: {c['address']}")
+        with col_b:
+            st.progress(conf / 100, text=f"{t['confidence_label']}: {conf}%")
+            st.caption(f"{t['source_label']}: {c.get('source', 'unknown')} | Tier {c.get('tier', 3)}")
+            if conf < 50:
+                st.warning(t["low_conf_warning"])
+        with col_c:
+            cid = c.get("id", 0)
+            if cid and st.button("OK " + t["btn_worked"], key=f"ok_{cid}_{c['name'][:8]}"):
+                record_feedback(cid, True)
+                st.success(t["feedback_ok"])
+            if cid and st.button("X " + t["btn_failed"], key=f"no_{cid}_{c['name'][:8]}"):
+                record_feedback(cid, False)
+                st.error(t["feedback_fail"])
+
+
+def render_grouped_contacts(grouped):
+    """
+    Render the three sections: Medical → Safety → Vehicle.
+    - Top 3 of each group visible by default
+    - "Show N more nearby" expander for the rest above floor
+    - "N lower-confidence (may not connect)" expander for below floor
+    - Empty sections are skipped
+    """
+    any_rendered = False
+    for group in CATEGORY_GROUPS:
+        section = grouped.get(group["key"], {})
+        visible = section.get("visible", [])
+        hidden  = section.get("hidden", [])
+
+        if not visible and not hidden:
+            continue
+        any_rendered = True
+
+        st.subheader(f"{group['title']} — {len(visible)} nearby")
+
+        for c in visible[:3]:
+            render_contact_card(c)
+
+        if len(visible) > 3:
+            with st.expander(f"Show {len(visible) - 3} more nearby"):
+                for c in visible[3:]:
+                    render_contact_card(c)
+
+        if hidden:
+            with st.expander(f"⚠️ {len(hidden)} lower-confidence (may not connect)"):
+                for c in hidden:
+                    render_contact_card(c, faded=True)
+
+    return any_rendered
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # STREAMLIT UI
 # ══════════════════════════════════════════════════════════════════════════════
@@ -738,6 +1008,14 @@ st.html("""
 <div style="font-size:13px;color:#9CA3AF;text-align:center;margin-top:6px;font-family:system-ui,sans-serif">
   Tap to call immediately &bull; Works offline &bull; 24×7 anywhere in India
 </div>
+<a href="/app/static/emergency.html" target="_blank"
+   style="display:block;margin-top:8px;background:#1E3A5F;color:#FFFFFF;
+          border-radius:10px;padding:11px;text-align:center;text-decoration:none;
+          font-family:system-ui,sans-serif;font-size:14px;font-weight:700;
+          letter-spacing:0.3px">
+  📱 Open Offline Emergency Mode &nbsp;·&nbsp;
+  <span style="opacity:0.85;font-weight:400">3,606 contacts cached on-device</span>
+</a>
 """)
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
@@ -779,110 +1057,26 @@ with st.sidebar:
     st.caption("IIT Madras Road Safety Hackathon 2026")
     st.caption("Soundarya · Shreya · Ashwin")
 
-# ── Input section ─────────────────────────────────────────────────────────────
-st.subheader("🆘 " + T["input_header"])
-
-# ── GPS auto-location ─────────────────────────────────────────────────────────
-# Uses streamlit-js-eval which runs JS in the main page (not a sandboxed iframe),
-# so mobile browsers (Chrome Android, Samsung Internet, Safari iOS) grant permission.
-
-if "gps_lat" not in st.session_state:
-    st.session_state.gps_lat = 0.0
-if "gps_lon" not in st.session_state:
-    st.session_state.gps_lon = 0.0
-if "_gps_pending" not in st.session_state:
-    st.session_state["_gps_pending"] = False
-
-# Accept coordinates passed via URL query params (backwards compat / desktop)
-_params = st.query_params
-if "lat" in _params and "lon" in _params and not st.session_state.gps_lat:
-    try:
-        st.session_state.gps_lat = float(_params["lat"])
-        st.session_state.gps_lon = float(_params["lon"])
-    except Exception:
-        pass
-
-try:
-    from streamlit_js_eval import get_geolocation as _get_geolocation
-    _GPS_COMPONENT = True
-except ImportError:
-    _GPS_COMPONENT = False
-
-if _GPS_COMPONENT:
-    _gcol1, _gcol2 = st.columns([5, 1])
-    with _gcol1:
-        _gps_already = bool(st.session_state.gps_lat)
-        _btn_label = "✅ Location Detected — tap to re-detect" if _gps_already else "📍 Auto-detect My Location"
-        if st.button(_btn_label, use_container_width=True):
-            st.session_state["_gps_pending"] = True
-            st.session_state.gps_lat = 0.0
-            st.session_state.gps_lon = 0.0
-    with _gcol2:
-        if st.session_state.gps_lat:
-            if st.button("🗑️", help="Clear GPS", use_container_width=True):
-                st.session_state.gps_lat = 0.0
-                st.session_state.gps_lon = 0.0
-                st.session_state["_gps_pending"] = False
-                st.session_state["_manual_lat"] = 0.0
-                st.session_state["_manual_lon"] = 0.0
-                st.rerun()
-
-    if st.session_state.get("_gps_pending"):
-        st.caption("⏳ Requesting your location — please **Allow** when your browser prompts…")
-        _loc = _get_geolocation()
-        if _loc and isinstance(_loc, dict) and _loc.get("coords"):
-            st.session_state.gps_lat = float(_loc["coords"]["latitude"])
-            st.session_state.gps_lon = float(_loc["coords"]["longitude"])
-            # Pre-seed the manual number inputs so they show the GPS coords
-            st.session_state["_manual_lat"] = st.session_state.gps_lat
-            st.session_state["_manual_lon"] = st.session_state.gps_lon
-            st.session_state["_gps_pending"] = False
-            st.rerun()
-else:
-    # Fallback for local dev without streamlit-js-eval installed
-    st.info("Install `streamlit-js-eval` for one-tap GPS detection on mobile.")
-
-auto_lat = st.session_state.gps_lat
-auto_lon = st.session_state.gps_lon
-
-if auto_lat != 0.0 and auto_lon != 0.0:
-    st.success(f"📍 GPS location: {auto_lat:.4f}, {auto_lon:.4f}")
-    # Proactive black spot check on GPS capture
-    _gps_spots = check_blackspot_proximity(auto_lat, auto_lon, radius_km=10)
-    if _gps_spots:
-        s = _gps_spots[0]
-        st.warning(
-            f"**Accident Black Spot Nearby ({s['distance_km']} km):** {s['name']}\n\n"
-            f"**Risk:** {s['risk_reason']}\n\n"
-            f"**Safety tip:** {s['tip']}"
-        )
-
-# ── WhatsApp Emergency Card — always visible ──────────────────────────────────
+# ── WhatsApp share URL builder (used later in results) ───────────────────────
 def _build_wa_url(lat=0.0, lon=0.0, situation="", urgency="", nearest_name="", nearest_phone=""):
-    """Build a WhatsApp share URL with a rich pre-filled emergency card."""
+    """Build a WhatsApp share URL with a pre-filled emergency card."""
     now = datetime.now()
     time_str = now.strftime("%d %b %Y, %I:%M %p")
-
     if lat and lon and lat != 0.0 and lon != 0.0:
         loc_line   = f"📍 GPS: {lat:.5f}, {lon:.5f}"
         maps_line  = f"🗺️ https://maps.google.com/?q={lat},{lon}"
     else:
-        loc_line   = "📍 Location: (GPS not yet detected — tap GPS button)"
+        loc_line   = "📍 Location: (GPS not detected)"
         maps_line  = ""
-
     situation_line = f"🚗 Situation: {situation}\n" if situation else ""
     urgency_line   = f"⚠️ Urgency: {urgency.upper()}\n" if urgency else ""
     nearest_line   = (f"🏥 Nearest help: {nearest_name} — {nearest_phone}\n"
                       if nearest_name and nearest_phone else "")
-
     msg = (
         f"🚨 ROAD ACCIDENT — URGENT HELP NEEDED 🚨\n\n"
-        f"{loc_line}\n"
-        f"{maps_line}\n\n"
+        f"{loc_line}\n{maps_line}\n\n"
         f"⏰ Time: {time_str}\n\n"
-        f"{situation_line}"
-        f"{urgency_line}"
-        f"{nearest_line}\n"
+        f"{situation_line}{urgency_line}{nearest_line}\n"
         f"📞 Call 112 — Emergency (Police · Ambulance · Fire)\n"
         f"📞 Call 108 — Ambulance (NHM, 29 states)\n"
         f"📞 Call 1033 — NHAI Highway Helpline\n\n"
@@ -892,110 +1086,76 @@ def _build_wa_url(lat=0.0, lon=0.0, situation="", urgency="", nearest_name="", n
     return f"https://wa.me/?text={urllib.parse.quote(msg.strip())}"
 
 
-# Build URL using whatever we know right now (GPS + any prior search)
-_prior_intent  = st.session_state.get("last_intent", {}) or {}
-_wa_url_now = _build_wa_url(
-    lat          = auto_lat,
-    lon          = auto_lon,
-    situation    = "",          # no search yet at this point
-    urgency      = "",
-    nearest_name = "",
-    nearest_phone= "",
-)
+# ── Location detection ──────────────────────────────────────────────────────
+# We use the streamlit-geolocation component (a proper declared Streamlit
+# component, not just an iframe HTML dump). It handles the iframe ↔ parent
+# bridging via Streamlit's official componentValue protocol, so the
+# coordinates flow back into Python state directly — no sandboxed-iframe-
+# can't-navigate-parent issue like we hit with raw HTML/JS.
+if "gps_lat" not in st.session_state:
+    st.session_state.gps_lat = 0.0
+if "gps_lon" not in st.session_state:
+    st.session_state.gps_lon = 0.0
 
-st.html(f"""
-<div style="margin:10px 0 6px 0;font-family:system-ui,sans-serif">
+# Accept ?lat=...&lon=... URL params (kept for desktop testing + bookmarks)
+_params = st.query_params
+if "lat" in _params and "lon" in _params and not st.session_state.gps_lat:
+    try:
+        st.session_state.gps_lat = float(_params["lat"])
+        st.session_state.gps_lon = float(_params["lon"])
+        st.query_params.clear()
+    except Exception:
+        pass
 
-  <!-- Card container -->
-  <div style="background:linear-gradient(135deg,#16A34A 0%,#15803D 100%);
-              border-radius:14px;padding:14px 16px;position:relative;overflow:hidden">
+auto_lat = st.session_state.gps_lat
+auto_lon = st.session_state.gps_lon
+have_gps = (auto_lat != 0.0 and auto_lon != 0.0)
 
-    <!-- Decorative circles -->
-    <div style="position:absolute;right:-20px;top:-20px;width:80px;height:80px;
-                background:rgba(255,255,255,0.08);border-radius:50%"></div>
-    <div style="position:absolute;right:20px;bottom:-25px;width:60px;height:60px;
-                background:rgba(255,255,255,0.06);border-radius:50%"></div>
+# ── Where are you input row ────────────────────────────────────────────────
+_loc_col1, _loc_col2 = st.columns([3, 1])
+with _loc_col1:
+    place_input = st.text_input(
+        "📍 Where are you?",
+        placeholder="Auto-locating · or type: Hosur · NH-44 · Chennai",
+        key="place_input",
+        label_visibility="collapsed",
+    )
+with _loc_col2:
+    # streamlit-geolocation renders a small button that, on tap, prompts the
+    # browser for location and returns a dict with latitude/longitude. The
+    # component handles all the iframe communication via Streamlit's
+    # official protocol.
+    try:
+        from streamlit_geolocation import streamlit_geolocation
+        _loc = streamlit_geolocation()
+        if _loc and _loc.get("latitude") is not None and not have_gps:
+            st.session_state.gps_lat = float(_loc["latitude"])
+            st.session_state.gps_lon = float(_loc["longitude"])
+            auto_lat = st.session_state.gps_lat
+            auto_lon = st.session_state.gps_lon
+            have_gps = True
+            st.rerun()
+    except ImportError:
+        st.warning("Install `streamlit-geolocation` for one-tap GPS detection.")
 
-    <!-- Header row -->
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-      <span style="font-size:22px">📲</span>
-      <div>
-        <div style="font-size:16px;font-weight:800;color:#FFFFFF;line-height:1.1">
-          Share Emergency on WhatsApp
-        </div>
-        <div style="font-size:11px;color:rgba(255,255,255,0.8);margin-top:1px">
-          {"📍 GPS ready · " if auto_lat else ""}Pre-fills location · numbers · time
-        </div>
-      </div>
-    </div>
+# ── Decide whether to run a search ─────────────────────────────────────────
+user_msg = st.session_state.get("refine_msg", "").strip()
+place_txt = (place_input or "").strip()
+should_search = have_gps or bool(place_txt) or bool(user_msg)
 
-    <!-- Preview card -->
-    <div style="background:rgba(255,255,255,0.12);border-radius:10px;
-                padding:10px 12px;margin-bottom:10px;font-size:12px;
-                color:rgba(255,255,255,0.95);line-height:1.7;font-family:monospace">
-      🚨 ROAD ACCIDENT — URGENT HELP<br>
-      {"📍 GPS: " + str(round(auto_lat,4)) + ", " + str(round(auto_lon,4)) if auto_lat else "📍 Location: [tap GPS to add]"}<br>
-      {"🗺️ maps.google.com/?q=" + str(auto_lat) + "," + str(auto_lon) + "<br>" if auto_lat else ""}
-      📞 112 · 108 · 1033<br>
-      ⏰ {datetime.now().strftime("%d %b %Y, %I:%M %p")}
-    </div>
+if not should_search:
+    st.caption("Tap **📍 GPS** to share location, or type a city / NH number above.")
 
-    <!-- Big WhatsApp button -->
-    <a href="{_wa_url_now}"
-       target="_blank"
-       style="display:block;background:#FFFFFF;color:#16A34A;border-radius:10px;
-              font-size:17px;font-weight:800;padding:13px;text-align:center;
-              text-decoration:none;letter-spacing:0.3px">
-      📤 Send on WhatsApp
-    </a>
-
-    <div style="font-size:11px;color:rgba(255,255,255,0.7);text-align:center;margin-top:8px">
-      You choose who to send to · Works on mobile & desktop
-    </div>
-  </div>
-
-</div>
-""")
-
-# ── Text input + manual GPS ───────────────────────────────────────────────────
-user_msg = st.text_area(
-    T["input_label"],
-    placeholder=T["input_placeholder"],
-    height=80,
-)
-
-# Pre-seed session state keys so number_input reads from them (avoids
-# the "value= conflicts with session state" warning in Streamlit >=1.35)
-if "_manual_lat" not in st.session_state:
-    st.session_state["_manual_lat"] = auto_lat
-if "_manual_lon" not in st.session_state:
-    st.session_state["_manual_lon"] = auto_lon
-# If GPS just fired, push the new coords into the widget keys
-if auto_lat != 0.0 and st.session_state["_manual_lat"] == 0.0:
-    st.session_state["_manual_lat"] = auto_lat
-if auto_lon != 0.0 and st.session_state["_manual_lon"] == 0.0:
-    st.session_state["_manual_lon"] = auto_lon
-
-with st.expander("Enter coordinates manually (optional)"):
-    col_lat, col_lon = st.columns(2)
-    with col_lat:
-        gps_lat = st.number_input(T["lat_label"], format="%.5f", step=0.001, key="_manual_lat")
-    with col_lon:
-        gps_lon = st.number_input(T["lon_label"], format="%.5f", step=0.001, key="_manual_lon")
-
-gps_lat = gps_lat or auto_lat
-gps_lon = gps_lon or auto_lon
-
-go = st.button("🔍 Find Emergency Help Near Me", type="primary", use_container_width=True)
-
-st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+# Variables consumed by the results block below
+gps_lat = auto_lat
+gps_lon = auto_lon
 
 # ── Results ───────────────────────────────────────────────────────────────────
-if go and (user_msg or (gps_lat != 0.0 and gps_lon != 0.0)):
+if should_search:
 
-    # 1. Parse intent
-    with st.spinner(T["spinner_intent"]):
-        intent = parse_intent_groq(user_msg or "emergency", _get_secret("GROQ_API_KEY"))
+    # 1. Parse intent — prefer typed place + optional situation message
+    _msg_for_parse = user_msg or place_txt or "emergency"
+    intent = parse_intent_groq(_msg_for_parse, _get_secret("GROQ_API_KEY"))
     st.session_state.last_intent = intent
 
     # Auto-detect language from script and switch UI if needed
@@ -1005,56 +1165,44 @@ if go and (user_msg or (gps_lat != 0.0 and gps_lon != 0.0)):
             st.session_state.ui_lang = detected
             T = get_T()
             st.toast(f"Language detected: {LANG_OPTIONS[detected]}", icon="🌐")
-        elif intent.get("language") in STRINGS and intent["language"] != st.session_state.get("ui_lang","en") and st.session_state.get("ui_lang","en") == "en":
-            st.session_state.ui_lang = intent["language"]
-            T = get_T()
 
-    urgency_colors = {"critical":"🔴","high":"🟠","medium":"🟡","low":"🟢"}
-    st.info(f"{urgency_colors.get(intent['urgency'],'🟠')} **{T['urgency_label']}: {intent['urgency'].upper()}** — "
-            f"{T['calling_label']}: {', '.join(intent.get('services',['ambulance']))} "
-            + (f"| {intent['highway']}" if intent.get('highway') else ""))
-
-    # 2. Geocode — GPS first, then offline lookup, then Nominatim (online)
+    # 2. Geocode — GPS first, then offline city dict, then Nominatim online
     from location.offline_geo import lookup_offline
     lat, lon, location_display = None, None, ""
     geo_source = ""
+    location_label = ""
 
-    if gps_lat != 0.0 and gps_lon != 0.0:
-        # Phone GPS — best accuracy, fully offline
+    if have_gps:
         lat, lon = gps_lat, gps_lon
         location_display = f"{lat:.4f}, {lon:.4f}"
         geo_source = "GPS"
-        st.success(f"GPS location: **{lat:.4f}, {lon:.4f}**")
-    elif user_msg:
-        # Try offline lookup first (no internet needed)
-        geo = lookup_offline(intent.get("location") or user_msg)
+        location_label = f"📍 GPS · {lat:.4f}, {lon:.4f}"
+    elif place_txt:
+        geo = lookup_offline(intent.get("location") or place_txt)
         if geo:
             lat, lon = geo["lat"], geo["lon"]
             location_display = geo.get("display", "")
             geo_source = "offline"
-            st.success(f"Location (offline): **{geo.get('city','')}**")
+            location_label = f"📍 {geo.get('city', place_txt).title()} (offline lookup)"
         else:
-            # Fall back to Nominatim if online
-            with st.spinner(T["spinner_locate"]):
-                geo = geocode_text(intent.get("location") or user_msg)
+            with st.spinner("Finding location…"):
+                geo = geocode_text(intent.get("location") or place_txt)
             if geo:
                 lat, lon = geo["lat"], geo["lon"]
                 location_display = geo.get("display", "")
                 geo_source = "online"
-                st.success(f"{T['located_msg']}: **{geo.get('city','')}, {geo.get('state','')}**")
+                city, state = geo.get("city", ""), geo.get("state", "")
+                location_label = f"📍 {city}, {state}" if (city or state) else f"📍 {place_txt}"
             else:
-                st.warning(f"{T['no_location']}")
+                st.warning(f"Couldn't find '{place_txt}'. Try a major city or NH-44.")
 
-    # 2b. Black Spot Warning — check after geocoding (for typed locations)
-    if lat and lon and geo_source != "GPS":  # GPS already checked above
-        _spots = check_blackspot_proximity(lat, lon, radius_km=10)
+    # ── Black Spot Warning (compact, only if within 5 km) ──────────────────
+    _blackspot_line = ""
+    if lat and lon:
+        _spots = check_blackspot_proximity(lat, lon, radius_km=5)
         if _spots:
             s = _spots[0]
-            st.warning(
-                f"**Accident Black Spot Nearby ({s['distance_km']} km):** {s['name']}\n\n"
-                f"**Risk:** {s['risk_reason']}\n\n"
-                f"**Safety tip:** {s['tip']}"
-            )
+            _blackspot_line = f"⚠️ Black spot {s['distance_km']} km: {s['name']} — {s['tip'][:80]}"
 
     # 3. Nearby contacts — include blood_bank + trauma for critical injuries
     db_contacts, osm_contacts = [], []
@@ -1091,106 +1239,64 @@ if go and (user_msg or (gps_lat != 0.0 and gps_lon != 0.0)):
 """, unsafe_allow_html=True)
 
     if lat and lon:
-        with st.spinner(T["spinner_search"]):
+        with st.spinner("Finding nearby help…"):
             db_contacts  = fetch_db_contacts(lat, lon, radius_km)
             osm_contacts = fetch_osm_contacts(lat, lon, int(radius_km*1000), _osm_cats or intent.get("services"))
 
         all_contacts = merge_contacts(db_contacts, osm_contacts)
 
-        # 4. Golden Hour Score
-        hospitals = [c for c in all_contacts if c.get("category")=="hospital"]
-        if hospitals:
-            gh = golden_hour(hospitals[0]["distance_km"], intent.get("on_highway",False))
-            gh_class = {"green":"gh-green","amber":"gh-amber","red":"gh-red"}[gh["status"]]
-            st.markdown(f"""
-            <div class="{gh_class}">
-              <strong>{gh['icon']} Golden Hour Score: {gh['msg']}</strong><br>
-              <span style="font-size:13px">{gh['advice']}</span>
-            </div>""", unsafe_allow_html=True)
-            st.markdown("")
+        # ── Compact status block: location + ETA + urgency + blackspot ─────
+        hospitals = [c for c in all_contacts if c.get("category") == "hospital"]
+        gh = golden_hour(hospitals[0]["distance_km"], intent.get("on_highway", False)) if hospitals else None
+        urgency = intent.get("urgency", "high")
+        urgency_dot = {"critical":"🔴","high":"🟠","medium":"🟡","low":"🟢"}.get(urgency, "🟠")
+        gh_color = {"green":"#16A34A","amber":"#D97706","red":"#DC2626"}.get(gh["status"], "#4B5563") if gh else "#4B5563"
+        eta_line = f"<span style=\"color:{gh_color}\">{gh['icon']} ~{gh['eta']} min to nearest hospital</span>" if gh else ""
 
-        # 4b. Blood bank alert — shown prominently for critical cases
+        st.markdown(
+            f'<div style="background:#F8FAFC;border:1px solid #E2E8F0;'
+            f'border-radius:10px;padding:10px 14px;margin:8px 0;'
+            f'font-family:system-ui,sans-serif">'
+            f'<div style="font-size:14px;font-weight:600;color:#111827">{location_label}</div>'
+            f'<div style="font-size:13px;color:#4B5563;margin-top:3px">'
+            f'{eta_line}'
+            f'{" · " if eta_line else ""}'
+            f'{urgency_dot} Urgency: <b>{urgency.upper()}</b>'
+            f'</div>'
+            + (f'<div style="font-size:12px;color:#92400E;margin-top:6px">{_blackspot_line}</div>'
+               if _blackspot_line else '')
+            + '</div>',
+            unsafe_allow_html=True,
+        )
+
+        # ── Triage call order (compact, only for critical/high) ─────────────
+        if urgency in ("critical", "high"):
+            if intent.get("on_highway"):
+                st.error(f"🚨 Call **112** first — single call dispatches police + ambulance + fire. If on NH → **1033** for highway patrol.")
+            else:
+                st.error(f"🚨 Call **112** first — single call dispatches police + ambulance + fire.")
+
+        # ── Blood bank alert (compact, only when no blood bank in results) ──
+        _is_critical = urgency in ("critical", "high")
         if _is_critical:
             blood_banks_found = [c for c in all_contacts if c.get("category") == "blood_bank"]
             if blood_banks_found:
                 bb = blood_banks_found[0]
                 st.markdown(
-                    f'<div style="background:#FEF2F2;border:2px solid #DC2626;border-radius:10px;'
-                    f'padding:12px 16px;margin:8px 0;font-family:system-ui,sans-serif">'
-                    f'<div style="font-size:15px;font-weight:600;color:#991B1B">'
-                    f'🩸 Nearest Blood Bank: {bb["name"]}</div>'
-                    f'<div style="font-size:26px;font-weight:800;color:#DC2626;margin:6px 0;letter-spacing:1px">'
-                    f'{bb.get("phone","Call 112")}</div>'
-                    f'<div style="font-size:13px;color:#4B5563">'
-                    f'{bb.get("distance_km","?")} km away &nbsp;·&nbsp; '
-                    f'{bb.get("address","")}</div>'
-                    f'<div style="font-size:13px;color:#991B1B;margin-top:6px">'
-                    f'Call ahead to pre-order blood — tell them accident type and likely blood volume needed</div>'
+                    f'<div style="background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;'
+                    f'padding:8px 12px;margin:6px 0;font-family:system-ui,sans-serif">'
+                    f'🩸 <b>Blood bank nearby:</b> {bb["name"]} '
+                    f'(<a href="tel:{urllib.parse.quote(bb.get("phone","108"))}" '
+                    f'style="color:#DC2626;font-weight:700">{bb.get("phone","108")}</a>'
+                    f') · {bb.get("distance_km","?")} km · call ahead to pre-order blood'
                     f'</div>',
-                    unsafe_allow_html=True
-                )
-            else:
-                st.markdown(
-                    '<div style="background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;'
-                    'padding:10px 14px;margin:8px 0;font-size:13px;color:#991B1B;'
-                    'font-family:system-ui,sans-serif">'
-                    '🩸 <b>Blood bank needed:</b> Call the nearest trauma centre directly '
-                    '— all listed trauma centres have 24×7 blood banks on-site.</div>',
-                    unsafe_allow_html=True
+                    unsafe_allow_html=True,
                 )
 
-        # 5. Triage call order
-        if intent["urgency"] in ("critical","high"):
-            if intent.get("on_highway"):
-                st.error(f"🚨 **{T['callorder_critical_hw']}**")
-            else:
-                st.error(f"🚨 **{T['callorder_critical']}**")
-        elif intent["urgency"] == "medium":
-            if "puncture" in intent.get("services",[]):
-                st.warning(f"**{T['callorder_puncture']}**")
-            else:
-                st.warning(f"**{T['callorder_medium']}**")
-
-        # 6. Show nearby contacts
+        # ── Grouped contact list (Medical / Safety / Vehicle) ───────────────
         if all_contacts:
-            st.subheader(f"{len(all_contacts)} " + T["contacts_found"].format(r=radius_km))
-            for c in all_contacts[:12]:
-                icon  = CATEGORY_ICONS.get(c.get("category","other"), "[!]")
-                conf  = c.get("confidence", 50)
-                badge_icon, badge_text, badge_color = confidence_badge(conf)
-                phone = c.get("phone") or "--"
-                dist  = c.get("distance_km","?")
-                tier_label = {1:"National",2:"Verified",3:"Local"}.get(c.get("tier",3),"Local")
-                with st.expander(
-                    f"{icon} **{c['name']}** - {dist} km | {badge_icon} {badge_text} | {tier_label}",
-                    expanded=(conf >= 80 or c.get("tier",3) <= 2)
-                ):
-                    col_a, col_b, col_c = st.columns([2,2,1])
-                    with col_a:
-                        if phone and phone != "--":
-                            st.markdown(f'<p class="big-phone">{phone}</p>', unsafe_allow_html=True)
-                            badge_html = get_badge_html(phone, c.get("country_code", "IN"))
-                            if badge_html:
-                                st.markdown(badge_html, unsafe_allow_html=True)
-                            if c.get("phone_alt"):
-                                st.markdown(f"Alt: **{c['phone_alt']}**")
-                        else:
-                            st.warning(T["no_phone"])
-                        if c.get("address"):
-                            st.caption(f"Addr: {c['address']}")
-                    with col_b:
-                        st.progress(conf/100, text=f"{T['confidence_label']}: {conf}%")
-                        st.caption(f"{T['source_label']}: {c.get('source','unknown')} | Tier {c.get('tier',3)}")
-                        if conf < 50:
-                            st.warning(T["low_conf_warning"])
-                    with col_c:
-                        cid = c.get("id", 0)
-                        if cid and st.button("OK " + T["btn_worked"], key=f"ok_{cid}_{c['name'][:8]}"):
-                            record_feedback(cid, True)
-                            st.success(T["feedback_ok"])
-                        if cid and st.button("X " + T["btn_failed"], key=f"no_{cid}_{c['name'][:8]}"):
-                            record_feedback(cid, False)
-                            st.error(T["feedback_fail"])
+            grouped = group_contacts(all_contacts, urgency=urgency)
+            render_grouped_contacts(grouped)
         else:
             # No local contacts from DB or OSM — show national numbers prominently
             st.markdown("""
@@ -1221,191 +1327,136 @@ if go and (user_msg or (gps_lat != 0.0 and gps_lon != 0.0)):
 </div>
 """, unsafe_allow_html=True)
 
-    # 7. Share — rich card with full situation context
-    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-    st.subheader("📤 " + T["share_header"])
-
+    # ── Compact share row — 2 inline buttons, no preview card ──────────────
     contacts_for_share = (db_contacts + osm_contacts)[:1]
     _near_name  = contacts_for_share[0]["name"]  if contacts_for_share else ""
-    _near_phone = contacts_for_share[0].get("phone","108") if contacts_for_share else ""
+    _near_phone = contacts_for_share[0].get("phone", "108") if contacts_for_share else ""
 
     _wa_url_rich = _build_wa_url(
         lat           = gps_lat,
         lon           = gps_lon,
         situation     = user_msg[:120] if user_msg else "",
-        urgency       = intent.get("urgency",""),
+        urgency       = intent.get("urgency", ""),
         nearest_name  = _near_name,
         nearest_phone = _near_phone,
     )
-
-    # SMS fallback (shorter message)
     _sms_body = (
         f"ROAD ACCIDENT {location_display or ''}\n"
         f"Urgency: {intent.get('urgency','?').upper()}\n"
         f"{('GPS: https://maps.google.com/?q=' + str(gps_lat) + ',' + str(gps_lon)) if gps_lat else ''}\n"
-        f"CALL 112 | 108\n"
-        f"Sent via RoadSoS"
+        f"CALL 112 | 108\nSent via RoadSoS"
     )
     sms_url = f"sms:?body={urllib.parse.quote(_sms_body.strip())}"
 
-    # Urgency colour
-    _urg = intent.get("urgency","medium")
-    _urg_colour = {"critical":"#DC2626","high":"#EA580C","medium":"#D97706","low":"#16A34A"}.get(_urg,"#D97706")
-
     st.html(f"""
-<div style="font-family:system-ui,sans-serif;margin:4px 0 10px 0">
-
-  <!-- Rich WhatsApp card -->
-  <div style="background:linear-gradient(135deg,#16A34A 0%,#15803D 100%);
-              border-radius:14px;padding:14px 16px;margin-bottom:10px;position:relative;overflow:hidden">
-    <div style="position:absolute;right:-15px;top:-15px;width:70px;height:70px;
-                background:rgba(255,255,255,0.08);border-radius:50%"></div>
-
-    <div style="font-size:13px;font-weight:700;color:rgba(255,255,255,0.85);
-                margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px">
-      📲 Full Emergency Card — WhatsApp
-    </div>
-
-    <!-- Message preview -->
-    <div style="background:rgba(255,255,255,0.12);border-radius:10px;
-                padding:10px 12px;margin-bottom:10px;font-size:11.5px;
-                color:rgba(255,255,255,0.95);line-height:1.75;font-family:monospace">
-      🚨 ROAD ACCIDENT — URGENT HELP<br>
-      {("📍 " + str(round(gps_lat,4)) + ", " + str(round(gps_lon,4))) if gps_lat else "📍 Location text shared"}<br>
-      {("🗺️ maps.google.com/?q=" + str(gps_lat) + "," + str(gps_lon) + "<br>") if gps_lat else ""}
-      {("🚗 " + user_msg[:80] + ("…" if len(user_msg) > 80 else "") + "<br>") if user_msg else ""}
-      <span style="color:#FDE68A;font-weight:700">⚠️ Urgency: {_urg.upper()}</span><br>
-      {("🏥 " + _near_name + " — " + _near_phone + "<br>") if _near_name else ""}
-      📞 112 · 108 · 1033 &nbsp;⏰ {datetime.now().strftime("%I:%M %p")}
-    </div>
-
-    <a href="{_wa_url_rich}" target="_blank"
-       style="display:block;background:#FFFFFF;color:#16A34A;border-radius:10px;
-              font-size:17px;font-weight:800;padding:13px;text-align:center;
-              text-decoration:none;letter-spacing:0.3px">
-      📤 Send on WhatsApp
-    </a>
-    <div style="font-size:11px;color:rgba(255,255,255,0.7);text-align:center;margin-top:7px">
-      You choose who to send to · Location · situation · nearest hospital included
-    </div>
-  </div>
-
-  <!-- SMS fallback -->
-  <a href="{sms_url}"
-     style="display:block;background:#1D4ED8;color:#FFFFFF;border-radius:10px;
-            font-size:15px;font-weight:700;padding:12px;text-align:center;
+<div style="display:flex;gap:8px;margin:14px 0 6px 0;font-family:system-ui,sans-serif">
+  <a href="{_wa_url_rich}" target="_blank"
+     style="flex:1;background:#25D366;color:#FFFFFF;border-radius:10px;
+            font-size:14px;font-weight:700;padding:11px;text-align:center;
             text-decoration:none">
-    💬 Send as SMS (no internet needed)
+    📤 WhatsApp emergency card
   </a>
-  <div style="font-size:11px;color:#9CA3AF;text-align:center;margin-top:5px">
-    {T["share_caption"]}
-  </div>
-
+  <a href="{sms_url}"
+     style="flex:1;background:#1D4ED8;color:#FFFFFF;border-radius:10px;
+            font-size:14px;font-weight:700;padding:11px;text-align:center;
+            text-decoration:none">
+    💬 SMS
+  </a>
 </div>
 """)
 
-elif go:
-    st.warning(T["no_input"])
+# ── Below results: refinement + first aid + countries — all collapsed ────────
+st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
-# ── ALWAYS show Tier 1 numbers ────────────────────────────────────────────────
-st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
-st.subheader("✅ " + T["tier1_header"])
-st.caption(T["tier1_caption"])
+# ── Optional "Describe situation" — feeds back into the parser on next run ───
+with st.expander("💬 Tell us what happened (optional — helps prioritise)", expanded=False):
+    _new_msg = st.text_area(
+        T["input_label"],
+        value=st.session_state.get("refine_msg", ""),
+        placeholder=T["input_placeholder"],
+        height=80,
+        label_visibility="collapsed",
+        key="_refine_textarea",
+    )
+    if st.button("Update results", type="primary"):
+        st.session_state["refine_msg"] = _new_msg
+        st.rerun()
 
-t1_cols = st.columns(4)
-for i, n in enumerate(INDIA_NATIONAL[:4]):
-    with t1_cols[i]:
-        icon = CATEGORY_ICONS.get(n["category"], "📞")
-        short = n.get("short", "")
-        st.markdown(f"""
-        <div class="tier1">
-          <div class="num">{n['phone']}</div>
-          <div class="lbl">{icon} {n['name']}</div>
-          {f'<div class="sub">{short}</div>' if short else ''}
-        </div>""", unsafe_allow_html=True)
+# ── First Aid (toggleable — render_first_aid uses its own expanders, so we
+# can't wrap it inside another st.expander; Streamlit forbids nesting) ──────
+if "show_first_aid" not in st.session_state:
+    st.session_state["show_first_aid"] = False
 
-# ── International Emergency Numbers ──────────────────────────────────────────
-st.subheader("🌍 International Emergency Numbers")
-_all_countries = load_country_numbers()
-st.caption(f"Instant reference for {len(_all_countries)} countries — works fully offline")
+_fa_label = ("🩺 Hide first aid guide"
+             if st.session_state["show_first_aid"]
+             else "🩺 First aid & golden hour guide (offline · 5 languages)")
+if st.button(_fa_label, use_container_width=True, key="fa_toggle"):
+    st.session_state["show_first_aid"] = not st.session_state["show_first_aid"]
+    st.rerun()
 
-_search_col, _info_col = st.columns([3, 1])
-with _search_col:
+if st.session_state["show_first_aid"]:
+    _intent_for_aid = st.session_state.get("last_intent", None)
+    render_first_aid(
+        user_msg=st.session_state.get("refine_msg", ""),
+        intent=_intent_for_aid,
+        lang=st.session_state.get("ui_lang", "en"),
+    )
+
+# ── Tier 1 grid + International (single expander) ──────────────────────────
+with st.expander("📞 Emergency numbers — India + 46 countries (always works)", expanded=False):
+    st.caption(T["tier1_caption"])
+    t1_cols = st.columns(4)
+    for i, n in enumerate(INDIA_NATIONAL[:4]):
+        with t1_cols[i]:
+            icon = CATEGORY_ICONS.get(n["category"], "📞")
+            short = n.get("short", "")
+            st.markdown(f"""
+            <div class="tier1">
+              <div class="num">{n['phone']}</div>
+              <div class="lbl">{icon} {n['name']}</div>
+              {f'<div class="sub">{short}</div>' if short else ''}
+            </div>""", unsafe_allow_html=True)
+
+    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+    st.markdown("**🌍 Other countries**")
+    _all_countries = load_country_numbers()
     _country_search = st.text_input(
-        "Search country", placeholder="e.g. Germany, Japan, UAE...",
+        "Search country", placeholder="e.g. Germany, Japan, UAE…",
         label_visibility="collapsed", key="country_search"
     )
-with _info_col:
-    st.markdown(
-        f'<div style="background:#1D4ED8;color:#FFFFFF;border-radius:8px;'
-        f'padding:6px 12px;text-align:center;font-weight:600;font-size:14px;'
-        f'font-family:system-ui,sans-serif">'
-        f'{len(_all_countries)} Countries</div>',
-        unsafe_allow_html=True
-    )
+    _filtered = [
+        c for c in _all_countries
+        if not _country_search or _country_search.lower() in c["name"].lower()
+           or _country_search.upper() in c["cc"]
+    ]
 
-_filtered = [
-    c for c in _all_countries
-    if not _country_search or _country_search.lower() in c["name"].lower()
-       or _country_search.upper() in c["cc"]
-]
-
-if _filtered:
     def _country_card_html(c):
         emerg  = c.get("emergency") or c.get("ambulance") or "—"
         police = c.get("police") or "—"
         amb    = c.get("ambulance") or "—"
         fire   = c.get("fire") or "—"
-        cc     = c["cc"].upper()
-        name   = c["name"]
         return (
             f'<div style="border:1px solid #E2E8F0;border-radius:10px;'
-            f'padding:10px 12px;margin:3px 0;background:#F8FAFC;min-height:90px;'
+            f'padding:8px 10px;margin:3px 0;background:#F8FAFC;min-height:80px;'
             f'font-family:system-ui,sans-serif">'
-            f'<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">'
+            f'<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">'
             f'<span style="background:#1E3A5F;color:#FFFFFF;font-size:10px;font-weight:600;'
-            f'padding:2px 6px;border-radius:4px;letter-spacing:0.8px">{cc}</span>'
-            f'<span style="font-size:14px;font-weight:600;color:#111827">{name}</span>'
-            f'</div>'
-            f'<div style="font-size:26px;font-weight:800;color:#DC2626;'
-            f'letter-spacing:1px;margin:4px 0;line-height:1.1">{emerg}</div>'
-            f'<div style="font-size:12px;color:#4B5563;line-height:1.8">'
-            f'🚔&nbsp;{police}&nbsp;&nbsp;🚑&nbsp;{amb}&nbsp;&nbsp;🚒&nbsp;{fire}</div>'
+            f'padding:2px 6px;border-radius:4px">{c["cc"].upper()}</span>'
+            f'<span style="font-size:13px;font-weight:600">{c["name"]}</span></div>'
+            f'<div style="font-size:22px;font-weight:800;color:#DC2626;margin:2px 0">{emerg}</div>'
+            f'<div style="font-size:11px;color:#4B5563">🚔 {police}  🚑 {amb}  🚒 {fire}</div>'
             f'</div>'
         )
 
-    _show_limit = 12 if not _country_search else len(_filtered)
-    _display = _filtered[:_show_limit]
-    _cols_per_row = 3
-    for _row_start in range(0, len(_display), _cols_per_row):
-        _row = _display[_row_start:_row_start + _cols_per_row]
-        _rcols = st.columns(_cols_per_row)
-        for _ci, _c in enumerate(_row):
+    _show_limit = 6 if not _country_search else len(_filtered)
+    for _row_start in range(0, min(len(_filtered), _show_limit), 3):
+        _rcols = st.columns(3)
+        for _ci, _c in enumerate(_filtered[_row_start:_row_start + 3]):
             with _rcols[_ci]:
                 st.markdown(_country_card_html(_c), unsafe_allow_html=True)
 
-    if not _country_search and len(_filtered) > _show_limit:
-        with st.expander(f"Show all {len(_filtered)} countries"):
-            _rest = _filtered[_show_limit:]
-            for _row_start in range(0, len(_rest), _cols_per_row):
-                _row = _rest[_row_start:_row_start + _cols_per_row]
-                _rcols = st.columns(_cols_per_row)
-                for _ci, _c in enumerate(_row):
-                    with _rcols[_ci]:
-                        st.markdown(_country_card_html(_c), unsafe_allow_html=True)
-else:
-    st.info(f"No country found matching '{_country_search}'")
-
-# ── First Aid — ALWAYS VISIBLE (works offline, no search needed) ─────────────
-st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
-st.subheader("🩺 First Aid & Golden Hour Guide")
-st.caption("Works fully offline · WHO · Indian Red Cross · MoRTH guidelines")
-_intent_for_aid = st.session_state.get("last_intent", None)
-render_first_aid(user_msg=user_msg, intent=_intent_for_aid,
-                 lang=st.session_state.get("ui_lang", "en"))
-
-# Footer
-st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
+# ── Footer ──────────────────────────────────────────────────────────────────
+st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
 col_f1, col_f2, col_f3 = st.columns(3)
 with col_f1:
     st.caption(T["footer1"])

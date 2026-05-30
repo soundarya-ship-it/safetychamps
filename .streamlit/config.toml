@@ -1,6 +1,9 @@
 [server]
 headless = true
 port = 8501
+# Serve files from the ./static folder at /app/static/* — used for PWA
+# manifest, service worker, icons, and the offline emergency.html companion.
+enableStaticServing = true
 
 [theme]
 primaryColor = "#dc2626"

@@ -1,0 +1,42 @@
+{
+  "name": "RoadSoS — Emergency Assistant",
+  "short_name": "RoadSoS",
+  "description": "AI-powered emergency assistant for road accidents in India. Verified nearby hospitals, ambulance services, golden-hour first aid. Works offline.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#ffffff",
+  "theme_color": "#dc2626",
+  "categories": ["medical", "navigation", "utilities"],
+  "lang": "en-IN",
+  "icons": [
+    {
+      "src": "/app/static/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/app/static/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/app/static/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Offline Emergency",
+      "short_name": "Offline",
+      "description": "Open the offline emergency page — works without signal",
+      "url": "/app/static/emergency.html",
+      "icons": [{ "src": "/app/static/icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}

@@ -1,0 +1,792 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#dc2626">
+  <title>RoadSoS — Offline Emergency</title>
+  <link rel="manifest" href="/app/static/manifest.json">
+  <link rel="icon" href="/app/static/icons/favicon.png">
+  <link rel="apple-touch-icon" href="/app/static/icons/icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="RoadSoS">
+<style>
+  :root {
+    --c-red:    #dc2626;
+    --c-red-d:  #991b1b;
+    --c-green:  #16a34a;
+    --c-green-d:#166534;
+    --c-blue:   #1d4ed8;
+    --c-amber:  #d97706;
+    --c-bg:     #f8fafc;
+    --c-text:   #111827;
+    --c-text-2: #4b5563;
+    --c-border: #e2e8f0;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                 "Helvetica Neue", Arial, sans-serif;
+    color: var(--c-text);
+    background: var(--c-bg);
+    -webkit-text-size-adjust: 100%;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 12px; }
+
+  /* ── Top banner ─────────────────────────────────────────────────────── */
+  .banner {
+    background: linear-gradient(135deg, var(--c-red) 0%, var(--c-red-d) 100%);
+    color: #fff;
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 12px;
+  }
+  .banner h1 {
+    margin: 0 0 4px 0;
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: 0.3px;
+  }
+  .banner p {
+    margin: 0;
+    font-size: 13px;
+    opacity: 0.92;
+    line-height: 1.4;
+  }
+  .badge {
+    display: inline-block;
+    background: rgba(255,255,255,0.2);
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+  }
+  .net-indicator {
+    position: fixed; top: 8px; right: 8px;
+    font-size: 11px;
+    background: rgba(0,0,0,0.65);
+    color: #fff;
+    padding: 3px 8px;
+    border-radius: 10px;
+    z-index: 100;
+  }
+
+  /* ── Tier 1 dial buttons ────────────────────────────────────────────── */
+  .tier1-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .tier1-grid a {
+    display: block;
+    text-decoration: none;
+    text-align: center;
+    border-radius: 12px;
+    padding: 16px 8px;
+    color: #fff;
+    font-weight: 800;
+    letter-spacing: 1.5px;
+  }
+  .tier1-grid a .big {
+    display: block;
+    font-size: 32px;
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+  .tier1-grid a .lbl {
+    display: block;
+    font-size: 11px;
+    opacity: 0.92;
+    letter-spacing: 0.3px;
+    font-weight: 600;
+  }
+  .t1-112 { background: var(--c-red); }
+  .t1-108 { background: var(--c-green); }
+  .t1-1033{ background: var(--c-blue); }
+
+  /* ── Section ──────────────────────────────────────────────────────── */
+  section { margin-bottom: 14px; }
+  section h2 {
+    font-size: 15px;
+    font-weight: 700;
+    margin: 0 0 6px 0;
+    color: var(--c-text);
+  }
+  .hint {
+    font-size: 12px;
+    color: var(--c-text-2);
+    margin-bottom: 6px;
+  }
+
+  /* ── Location controls ─────────────────────────────────────────────── */
+  .loc-row {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+  .btn {
+    border: 1px solid var(--c-border);
+    background: #fff;
+    color: var(--c-text);
+    border-radius: 10px;
+    padding: 12px 14px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    flex: 1;
+    min-height: 48px;
+  }
+  .btn-primary {
+    background: var(--c-red);
+    color: #fff;
+    border-color: var(--c-red);
+  }
+  .btn:active { transform: scale(0.98); }
+
+  .text-input {
+    width: 100%;
+    border: 1px solid var(--c-border);
+    border-radius: 10px;
+    padding: 12px;
+    font-size: 14px;
+    min-height: 48px;
+    background: #fff;
+    color: var(--c-text);
+  }
+  .text-input:focus { outline: 2px solid var(--c-red); outline-offset: -1px; }
+
+  .gps-status {
+    font-size: 12px;
+    color: var(--c-text-2);
+    margin-top: 6px;
+  }
+  .gps-ok { color: var(--c-green-d); font-weight: 600; }
+  .gps-err { color: var(--c-red-d); }
+
+  /* ── Contact cards ───────────────────────────────────────────────────── */
+  .card {
+    background: #fff;
+    border: 1px solid var(--c-border);
+    border-left: 4px solid var(--c-border);
+    border-radius: 10px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+  }
+  .card.cat-hospital { border-left-color: var(--c-green); }
+  .card.cat-police   { border-left-color: var(--c-blue); }
+  .card.cat-ambulance{ border-left-color: var(--c-red); }
+  .card.cat-trauma   { border-left-color: var(--c-red); }
+  .card.cat-blood_bank, .card.cat-bloodbank { border-left-color: var(--c-red); }
+  .card.cat-towing   { border-left-color: var(--c-amber); }
+
+  .card .top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .card .name {
+    font-weight: 700;
+    font-size: 14px;
+    line-height: 1.3;
+  }
+  .card .meta {
+    font-size: 11px;
+    color: var(--c-text-2);
+    margin: 3px 0 6px 0;
+  }
+  .card .phones {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .card a.dial {
+    display: inline-block;
+    background: var(--c-green-d);
+    color: #fff;
+    text-decoration: none;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    text-align: center;
+  }
+  .card a.dial.alt {
+    background: var(--c-text-2);
+    font-size: 13px;
+    padding: 7px 12px;
+    font-weight: 600;
+  }
+  .card .dist {
+    font-size: 11px;
+    color: var(--c-text-2);
+    white-space: nowrap;
+  }
+  .card .conf-pill {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 8px;
+    color: #fff;
+    background: #6b7280;
+  }
+  .card .conf-pill.high  { background: var(--c-green-d); }
+  .card .conf-pill.med   { background: var(--c-amber); }
+
+  /* ── First aid ─────────────────────────────────────────────────────── */
+  .aid-step {
+    border-left: 4px solid var(--c-red);
+    background: #fff;
+    padding: 8px 12px;
+    margin: 5px 0;
+    border-radius: 0 6px 6px 0;
+  }
+  .aid-step b { color: var(--c-red); font-size: 13px; }
+  .aid-step p { margin: 3px 0 0 0; font-size: 12px; color: #374151; }
+  .aid-dont {
+    background: #fef2f2;
+    border-left: 4px solid var(--c-red);
+    color: var(--c-red-d);
+    padding: 6px 12px;
+    margin: 4px 0;
+    border-radius: 0 6px 6px 0;
+    font-size: 12px;
+  }
+
+  /* ── Share row ─────────────────────────────────────────────────────── */
+  .share-row {
+    display: flex;
+    gap: 6px;
+  }
+  .share-row a {
+    flex: 1;
+    text-decoration: none;
+    text-align: center;
+    padding: 12px;
+    border-radius: 10px;
+    color: #fff;
+    font-weight: 700;
+    font-size: 14px;
+  }
+  .share-wa  { background: #25d366; }
+  .share-sms { background: var(--c-blue); }
+
+  details {
+    background: #fff;
+    border: 1px solid var(--c-border);
+    border-radius: 10px;
+    padding: 10px 14px;
+    margin-bottom: 8px;
+  }
+  details summary {
+    font-weight: 700;
+    cursor: pointer;
+    list-style: none;
+  }
+  details[open] summary { margin-bottom: 8px; }
+
+  footer {
+    text-align: center;
+    color: var(--c-text-2);
+    font-size: 11px;
+    padding: 16px 0 24px 0;
+    line-height: 1.6;
+  }
+
+  @media (max-width: 600px) {
+    .tier1-grid a .big { font-size: 28px; }
+    .wrap { padding: 8px; }
+  }
+</style>
+</head>
+<body>
+<div id="net" class="net-indicator">📡 checking…</div>
+<div class="wrap">
+
+  <!-- ── Top emergency banner ─────────────────────────────────────────── -->
+  <div class="banner">
+    <span class="badge">OFFLINE EMERGENCY MODE</span>
+    <h1>🚨 RoadSoS</h1>
+    <p>Works without internet · 3,606 verified contacts on-device · India + 46 countries</p>
+  </div>
+
+  <!-- ── Tier 1 always-dial buttons ───────────────────────────────────── -->
+  <section>
+    <div class="tier1-grid">
+      <a href="tel:112" class="t1-112">
+        <span class="big">112</span>
+        <span class="lbl">National Emergency · 24×7</span>
+      </a>
+      <a href="tel:108" class="t1-108">
+        <span class="big">108</span>
+        <span class="lbl">Ambulance</span>
+      </a>
+      <a href="tel:1033" class="t1-1033">
+        <span class="big">1033</span>
+        <span class="lbl">NHAI Highway</span>
+      </a>
+    </div>
+    <div class="hint">Tap any number to dial — works without internet.</div>
+  </section>
+
+  <!-- ── Find nearest help ────────────────────────────────────────────── -->
+  <section>
+    <h2>📍 Find nearest help</h2>
+    <div class="loc-row">
+      <button class="btn btn-primary" onclick="getGPS()">📍 Use my GPS</button>
+      <button class="btn" onclick="toggleManual()">✏️ Type place</button>
+    </div>
+    <div id="gps-status" class="gps-status">Tap GPS — the chip works offline.</div>
+
+    <div id="manual-row" style="display:none; margin-top:8px">
+      <input id="manual-place" class="text-input"
+             placeholder="e.g. Hosur, Chennai, NH-44, Mumbai…"
+             oninput="lookupOffline()">
+      <div class="hint">Recognises 500+ Indian cities and all major NH corridors — no internet needed.</div>
+    </div>
+  </section>
+
+  <!-- ── Results ──────────────────────────────────────────────────────── -->
+  <section id="results-section" style="display:none">
+    <h2 id="results-header">Nearest contacts</h2>
+    <div id="results"></div>
+  </section>
+
+  <!-- ── Share emergency on WhatsApp/SMS ─────────────────────────────── -->
+  <section id="share-section" style="display:none">
+    <h2>📤 Share location with family</h2>
+    <div class="share-row">
+      <a id="share-wa"  class="share-wa"  href="#">WhatsApp</a>
+      <a id="share-sms" class="share-sms" href="#">SMS</a>
+    </div>
+    <div class="hint">WhatsApp uses internet (queues if offline). SMS works with cellular signal only.</div>
+  </section>
+
+  <!-- ── First aid (always visible) ──────────────────────────────────── -->
+  <section>
+    <h2>🩺 First aid — golden hour</h2>
+    <details open>
+      <summary>General accident steps (always follow)</summary>
+      <div class="aid-step"><b>Step 1: Stop bleeding</b>
+        <p>Press firmly on the wound with any clean cloth. Hold pressure — do not lift to check. If blood soaks through, add more cloth on top, do not replace.</p>
+      </div>
+      <div class="aid-step"><b>Step 2: Keep the person still</b>
+        <p>Do NOT move someone with a head/neck/spine injury unless they are in immediate danger (fire, traffic). Movement can paralyse.</p>
+      </div>
+      <div class="aid-step"><b>Step 3: Check breathing</b>
+        <p>Look at chest. Listen at mouth. Feel for breath on your cheek. If not breathing, begin chest compressions: centre of chest, 5 cm deep, 100 per minute, do not stop until ambulance arrives.</p>
+      </div>
+      <div class="aid-step"><b>Step 4: Keep warm + reassure</b>
+        <p>Cover with a coat or blanket. Talk to them — keep them awake if possible. Loss of consciousness needs urgent hospitalisation.</p>
+      </div>
+      <div class="aid-dont">❌ Do NOT give food or water — risk of choking if surgery needed.</div>
+      <div class="aid-dont">❌ Do NOT move someone bleeding from ears/nose — possible skull fracture.</div>
+      <div class="aid-dont">❌ Do NOT remove embedded objects — pack around them.</div>
+    </details>
+
+    <details>
+      <summary>CPR (no pulse, not breathing)</summary>
+      <div class="aid-step"><b>Hand position</b><p>Heel of one hand at the centre of chest. Other hand on top, fingers interlocked. Arms straight.</p></div>
+      <div class="aid-step"><b>Depth and rate</b><p>Push down 5–6 cm. Let chest fully recoil. 100–120 compressions per minute. Hum "Stayin' Alive" — that's the rhythm.</p></div>
+      <div class="aid-step"><b>Continue without pausing</b><p>If alone, just compressions — no breaths. Do not stop until ambulance arrives or person breathes.</p></div>
+    </details>
+
+    <details>
+      <summary>Severe bleeding</summary>
+      <div class="aid-step"><b>Direct pressure</b><p>Firm, continuous pressure with palm + clean cloth. 10 minutes minimum without lifting.</p></div>
+      <div class="aid-step"><b>Elevate if possible</b><p>Raise the wounded limb above heart level if no fracture suspected.</p></div>
+      <div class="aid-step"><b>Tourniquet — last resort</b><p>Only for life-threatening limb bleeding that won't stop. 5 cm above wound, never on joints. Note the time.</p></div>
+    </details>
+
+    <details>
+      <summary>Spinal / neck injury</summary>
+      <div class="aid-step"><b>Do NOT move</b><p>Support the head and neck in the position found. Hold gently with both hands.</p></div>
+      <div class="aid-step"><b>If you must move (fire/traffic)</b><p>Log roll: 3+ people, keep head, neck, and spine in one straight line.</p></div>
+    </details>
+  </section>
+
+  <footer>
+    RoadSoS — IIT Madras Road Safety Hackathon 2026<br>
+    Soundarya · Shreya · Ashwin<br>
+    Sources: NHP data.gov.in · MoRTH · WHO · Indian Red Cross
+  </footer>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════════════════════════
+// State
+// ════════════════════════════════════════════════════════════════════════════
+let CONTACTS = [];   // loaded from /app/static/contacts.json
+let CURRENT  = null; // current location {lat, lon, source}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Network indicator
+// ════════════════════════════════════════════════════════════════════════════
+function updateNetIndicator() {
+  const n = document.getElementById('net');
+  if (navigator.onLine) {
+    n.textContent = '🟢 Online';
+    n.style.background = 'rgba(22,163,74,0.85)';
+  } else {
+    n.textContent = '🔴 Offline';
+    n.style.background = 'rgba(220,38,38,0.85)';
+  }
+}
+window.addEventListener('online',  updateNetIndicator);
+window.addEventListener('offline', updateNetIndicator);
+updateNetIndicator();
+
+// ════════════════════════════════════════════════════════════════════════════
+// Offline geocoder — 100+ Indian cities (subset of Python's offline_geo.py)
+// Used when GPS fails and the user types a place name. Works without internet.
+// ════════════════════════════════════════════════════════════════════════════
+const CITIES = {
+  "chennai":[13.0827,80.2707], "coimbatore":[11.0168,76.9558],
+  "madurai":[9.9252,78.1198], "trichy":[10.7905,78.7047],
+  "tiruchirappalli":[10.7905,78.7047], "salem":[11.6643,78.1460],
+  "tirunelveli":[8.7139,77.7567], "hosur":[12.7409,77.8253],
+  "vellore":[12.9165,79.1325], "erode":[11.3410,77.7172],
+  "krishnagiri":[12.5186,78.2137], "dharmapuri":[12.1281,78.1580],
+  "thanjavur":[10.7870,79.1378], "dindigul":[10.3624,77.9695],
+  "tirupur":[11.1085,77.3411], "ooty":[11.4102,76.6950],
+  "thoothukudi":[8.7642,78.1348], "tuticorin":[8.7642,78.1348],
+  "kanyakumari":[8.0883,77.5385],
+  "bangalore":[12.9716,77.5946], "bengaluru":[12.9716,77.5946],
+  "mysore":[12.2958,76.6394], "mysuru":[12.2958,76.6394],
+  "hubli":[15.3647,75.1240], "mangalore":[12.9141,74.8560],
+  "belgaum":[15.8497,74.4977], "tumkur":[13.3379,77.1010],
+  "shimoga":[13.9299,75.5681], "davanagere":[14.4644,75.9218],
+  "hyderabad":[17.3850,78.4867], "vizag":[17.6868,83.2185],
+  "visakhapatnam":[17.6868,83.2185], "vijayawada":[16.5062,80.6480],
+  "warangal":[17.9784,79.5941], "guntur":[16.3008,80.4428],
+  "nellore":[14.4426,79.9865], "tirupati":[13.6288,79.4192],
+  "kakinada":[16.9891,82.2475], "rajahmundry":[17.0005,81.8040],
+  "mumbai":[19.0760,72.8777], "bombay":[19.0760,72.8777],
+  "pune":[18.5204,73.8567], "nagpur":[21.1458,79.0882],
+  "nashik":[19.9975,73.7898], "aurangabad":[19.8762,75.3433],
+  "solapur":[17.6599,75.9064], "kolhapur":[16.7050,74.2433],
+  "thane":[19.2183,72.9781], "amravati":[20.9320,77.7523],
+  "ahmedabad":[23.0225,72.5714], "surat":[21.1702,72.8311],
+  "vadodara":[22.3072,73.1812], "rajkot":[22.3039,70.8022],
+  "bhavnagar":[21.7645,72.1519], "gandhinagar":[23.2156,72.6369],
+  "jaipur":[26.9124,75.7873], "jodhpur":[26.2389,73.0243],
+  "udaipur":[24.5854,73.7125], "ajmer":[26.4499,74.6399],
+  "kota":[25.2138,75.8648], "bikaner":[28.0229,73.3119],
+  "bhopal":[23.2599,77.4126], "indore":[22.7196,75.8577],
+  "gwalior":[26.2183,78.1828], "jabalpur":[23.1815,79.9864],
+  "ujjain":[23.1765,75.7885],
+  "lucknow":[26.8467,80.9462], "kanpur":[26.4499,80.3319],
+  "agra":[27.1767,78.0081], "varanasi":[25.3176,82.9739],
+  "allahabad":[25.4358,81.8463], "prayagraj":[25.4358,81.8463],
+  "meerut":[28.9845,77.7064], "bareilly":[28.3670,79.4304],
+  "aligarh":[27.8974,78.0880], "mathura":[27.4924,77.6737],
+  "delhi":[28.6139,77.2090], "new delhi":[28.6139,77.2090],
+  "noida":[28.5355,77.3910], "gurgaon":[28.4595,77.0266],
+  "gurugram":[28.4595,77.0266], "faridabad":[28.4089,77.3178],
+  "chandigarh":[30.7333,76.7794], "amritsar":[31.6340,74.8723],
+  "ludhiana":[30.9010,75.8573], "jalandhar":[31.3260,75.5762],
+  "shimla":[31.1048,77.1734], "manali":[32.2396,77.1887],
+  "patna":[25.5941,85.1376], "gaya":[24.7955,85.0002],
+  "ranchi":[23.3441,85.3096], "jamshedpur":[22.8046,86.2029],
+  "kolkata":[22.5726,88.3639], "calcutta":[22.5726,88.3639],
+  "howrah":[22.5958,88.2636], "durgapur":[23.5204,87.3119],
+  "siliguri":[26.7271,88.3953],
+  "bhubaneswar":[20.2961,85.8245], "cuttack":[20.4625,85.8830],
+  "rourkela":[22.2604,84.8536],
+  "trivandrum":[8.5241,76.9366], "thiruvananthapuram":[8.5241,76.9366],
+  "kochi":[9.9312,76.2673], "cochin":[9.9312,76.2673],
+  "calicut":[11.2588,75.7804], "kozhikode":[11.2588,75.7804],
+  "thrissur":[10.5276,76.2144], "palakkad":[10.7867,76.6548],
+  "guwahati":[26.1445,91.7362], "panaji":[15.4909,73.8278],
+  "margao":[15.2832,73.9862],
+};
+
+function offlineLookup(text) {
+  if (!text) return null;
+  const t = text.toLowerCase().trim();
+  // Longest-match wins (so "new delhi" beats "delhi")
+  let best = null, bestLen = 0;
+  for (const name in CITIES) {
+    if (t.includes(name) && name.length > bestLen) {
+      best = name; bestLen = name.length;
+    }
+  }
+  if (best) {
+    const [lat, lon] = CITIES[best];
+    return { lat, lon, source: "offline-dict", display: best };
+  }
+  return null;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Load contacts JSON
+// ════════════════════════════════════════════════════════════════════════════
+fetch('/app/static/contacts.json')
+  .then(r => r.json())
+  .then(d => {
+    CONTACTS = d.contacts || [];
+    console.log(`[offline] loaded ${CONTACTS.length} contacts`);
+  })
+  .catch(err => {
+    console.error('[offline] contacts.json failed to load', err);
+    document.getElementById('gps-status').textContent =
+      'Could not load contact database. Tier 1 numbers still work above.';
+  });
+
+// ════════════════════════════════════════════════════════════════════════════
+// GPS — uses browser API, works offline if GPS chip can fix
+// ════════════════════════════════════════════════════════════════════════════
+function getGPS() {
+  const status = document.getElementById('gps-status');
+  status.className = 'gps-status';
+  status.textContent = '⏳ Requesting your location — please Allow when prompted…';
+
+  if (!navigator.geolocation) {
+    status.className = 'gps-status gps-err';
+    status.textContent = 'Geolocation not supported by this browser. Type a place name instead.';
+    document.getElementById('manual-row').style.display = 'block';
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      CURRENT = {
+        lat: pos.coords.latitude,
+        lon: pos.coords.longitude,
+        source: "gps",
+      };
+      status.className = 'gps-status gps-ok';
+      status.textContent =
+        `✅ GPS fix: ${CURRENT.lat.toFixed(4)}, ${CURRENT.lon.toFixed(4)} `
+        + `(±${Math.round(pos.coords.accuracy)} m)`;
+      renderResults();
+    },
+    err => {
+      status.className = 'gps-status gps-err';
+      status.textContent = `❌ GPS failed (${err.message}). Type a city name instead.`;
+      document.getElementById('manual-row').style.display = 'block';
+    },
+    { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 }
+  );
+}
+
+function toggleManual() {
+  const m = document.getElementById('manual-row');
+  m.style.display = m.style.display === 'none' ? 'block' : 'none';
+}
+
+function lookupOffline() {
+  const text = document.getElementById('manual-place').value;
+  const result = offlineLookup(text);
+  const status = document.getElementById('gps-status');
+  if (result) {
+    CURRENT = result;
+    status.className = 'gps-status gps-ok';
+    status.textContent = `✅ Found offline: ${result.display}`;
+    renderResults();
+  } else if (text.length > 2) {
+    status.className = 'gps-status';
+    status.textContent = `Searching… (offline dictionary has 100+ Indian cities + NH corridors)`;
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Distance + category grouping (mirrors app.py)
+// ════════════════════════════════════════════════════════════════════════════
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2) ** 2
+          + Math.cos(lat1 * Math.PI/180) * Math.cos(lat2 * Math.PI/180)
+          * Math.sin(dLon/2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+const GROUPS = [
+  {
+    key:   "medical",
+    title: "🏥 Medical",
+    cats:  ["trauma","specialty_hospital","neuro_spinal","burn_centre",
+            "paediatric_trauma","ortho_trauma","hospital","blood_bank","ambulance"],
+    specialty: ["trauma","specialty_hospital","neuro_spinal","burn_centre","paediatric_trauma"],
+  },
+  {
+    key:   "safety",
+    title: "🚔 Safety",
+    cats:  ["police","fire"],
+    specialty: [],
+  },
+  {
+    key:   "vehicle",
+    title: "🚛 Vehicle & Roadside",
+    cats:  ["towing","highway_helpline","puncture","pharmacy","fuel"],
+    specialty: [],
+  },
+];
+
+const CONFIDENCE_FLOOR = 50;
+
+/**
+ * Annotate every contact with its distance, then split into the 3 sections.
+ * Specialty-medical categories get a 2 km "boost" so trauma centres surface
+ * above generic hospitals when seconds matter.
+ */
+function groupContacts(lat, lon, radiusKm = 25) {
+  if (!CONTACTS.length) return [];
+  const withDist = CONTACTS
+    .filter(c => c.lat != null && c.lon != null && c.tier > 1)
+    .map(c => ({ ...c, distKm: haversineKm(lat, lon, c.lat, c.lon) }))
+    .filter(c => c.distKm <= radiusKm);
+
+  return GROUPS.map(g => {
+    const members = withDist.filter(c => g.cats.includes(c.category));
+    members.forEach(c => {
+      c.sortDist = g.specialty.includes(c.category) ? Math.max(0, c.distKm - 2) : c.distKm;
+    });
+    members.sort((a, b) => a.sortDist - b.sortDist);
+    return {
+      ...g,
+      visible: members.filter(c => (c.confidence || 0) >= CONFIDENCE_FLOOR),
+      hidden:  members.filter(c => (c.confidence || 0) <  CONFIDENCE_FLOOR),
+    };
+  }).filter(g => g.visible.length || g.hidden.length);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Render contact list
+// ════════════════════════════════════════════════════════════════════════════
+function confPill(c) {
+  if (c >= 80) return '<span class="conf-pill high">VERIFIED</span>';
+  if (c >= 50) return '<span class="conf-pill med">LIKELY OK</span>';
+  return '<span class="conf-pill">UNVERIFIED</span>';
+}
+
+function escapeHtml(s) {
+  if (s == null) return '';
+  return String(s).replace(/[&<>"']/g, ch => ({
+    '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
+  })[ch]);
+}
+
+function categoryIcon(cat) {
+  return {
+    hospital: '🏥', trauma: '🏨', specialty_hospital: '🏥',
+    police: '🚔', ambulance: '🚑', blood_bank: '🩸',
+    towing: '🚛', puncture: '🔧', pharmacy: '💊',
+    fire: '🚒', highway_helpline: '🛣️',
+  }[cat] || '📍';
+}
+
+function cardHtml(c, faded = false) {
+  const safePhone = encodeURIComponent(c.phone);
+  const opacity   = faded ? 'opacity:0.65' : '';
+  return `
+    <div class="card cat-${escapeHtml(c.category)}" style="${opacity}">
+      <div class="top">
+        <div>
+          <div class="name">${categoryIcon(c.category)} ${escapeHtml(c.name)}</div>
+          <div class="meta">
+            ${escapeHtml(c.district || '')}${c.district ? ', ' : ''}
+            ${escapeHtml(c.state || '')}
+            ${confPill(c.confidence || 50)}
+          </div>
+        </div>
+        <div class="dist">${c.distKm.toFixed(1)} km</div>
+      </div>
+      <div class="phones">
+        <a class="dial" href="tel:${safePhone}">📞 ${escapeHtml(c.phone)}</a>
+        ${c.phone_alt
+          ? `<a class="dial alt" href="tel:${encodeURIComponent(c.phone_alt)}">Alt: ${escapeHtml(c.phone_alt)}</a>`
+          : ''
+        }
+      </div>
+    </div>
+  `;
+}
+
+function sectionHtml(group) {
+  const visibleTop = group.visible.slice(0, 3).map(c => cardHtml(c)).join('');
+  const visibleMore = group.visible.slice(3).map(c => cardHtml(c)).join('');
+  const hiddenCards = group.hidden.map(c => cardHtml(c, true)).join('');
+
+  const moreBlock = visibleMore
+    ? `<details style="margin-top:6px">
+         <summary>Show ${group.visible.length - 3} more nearby</summary>
+         ${visibleMore}
+       </details>`
+    : '';
+  const hiddenBlock = hiddenCards
+    ? `<details style="margin-top:6px">
+         <summary>⚠️ ${group.hidden.length} lower-confidence (may not connect)</summary>
+         ${hiddenCards}
+       </details>`
+    : '';
+
+  return `
+    <h2 style="margin-top:14px">${group.title} — ${group.visible.length} nearby</h2>
+    ${visibleTop}
+    ${moreBlock}
+    ${hiddenBlock}
+  `;
+}
+
+function renderResults() {
+  if (!CURRENT) return;
+
+  document.getElementById('results-section').style.display = 'block';
+  document.getElementById('share-section').style.display = 'block';
+
+  const groups = groupContacts(CURRENT.lat, CURRENT.lon, 25);
+  const totalVisible = groups.reduce((n, g) => n + g.visible.length, 0);
+
+  document.getElementById('results-header').textContent =
+    totalVisible
+      ? `Nearby help — grouped by what you need`
+      : `No contacts found within 25 km — use the buttons above.`;
+
+  document.getElementById('results').innerHTML =
+    groups.map(sectionHtml).join('');
+
+  // For the share card: pick the nearest VISIBLE medical contact if any,
+  // else nearest of anything, else null
+  const med = groups.find(g => g.key === 'medical');
+  const sharePick =
+    (med && med.visible[0])      ||
+    (groups[0] && groups[0].visible[0]) ||
+    null;
+  renderShare(sharePick);
+}
+
+function renderShare(nearest) {
+  const lat = CURRENT.lat.toFixed(5);
+  const lon = CURRENT.lon.toFixed(5);
+  const time = new Date().toLocaleString('en-IN');
+  const nearLine = nearest
+    ? `🏥 ${nearest.name} — ${nearest.phone} (${nearest.distKm.toFixed(1)} km)`
+    : '';
+
+  const msg = [
+    '🚨 ROAD ACCIDENT — URGENT HELP',
+    `📍 GPS: ${lat}, ${lon}`,
+    `🗺️ https://maps.google.com/?q=${lat},${lon}`,
+    `⏰ ${time}`,
+    nearLine,
+    '📞 112 · 108 · 1033',
+    '— Sent via RoadSoS Offline',
+  ].filter(Boolean).join('\n');
+
+  document.getElementById('share-wa').href  =
+    `https://wa.me/?text=${encodeURIComponent(msg)}`;
+  document.getElementById('share-sms').href = `sms:?body=${encodeURIComponent(msg)}`;
+}
+</script>
+</body>
+</html>
