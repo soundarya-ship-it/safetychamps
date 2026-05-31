@@ -585,6 +585,17 @@ CATEGORY_GROUPS = [
 
 CONFIDENCE_FLOOR = 50   # contacts below this get hidden behind an expander
 
+# Sources whose lat/lon point at the actual building/establishment (within
+# a few hundred metres). Showing a "Get directions" button on rows from
+# other sources (notably 'district_seed', whose coords are the district HQ
+# centroid + a 500m offset to prevent map-pin overlap) would mislead users
+# to navigate to the wrong place.
+TRUSTED_COORD_SOURCES = {
+    "nhp_data_gov", "nhp", "aiims", "nbtc", "nhai",
+    "state_police_website", "government_mandated",
+    "osm", "sgpgi", "sctimst", "nimhans",
+}
+
 
 def group_contacts(contacts, urgency="high"):
     """
@@ -666,6 +677,22 @@ def render_contact_card(c, faded=False):
                     )
             else:
                 st.warning(t["no_phone"])
+            # Directions — only for contacts with TRUSTED building-level
+            # coords. District-seed rows are excluded because their
+            # coordinates are admin centroids + a 500m offset to prevent
+            # pin overlap, not the actual hospital location.
+            if (c.get("lat") and c.get("lon")
+                and c.get("source") in TRUSTED_COORD_SOURCES):
+                maps_url = (f"https://www.google.com/maps/dir/?api=1"
+                            f"&destination={c['lat']},{c['lon']}")
+                st.markdown(
+                    f'<a href="{maps_url}" target="_blank" '
+                    f'style="display:inline-block;margin-top:6px;background:#1D4ED8;'
+                    f'color:#FFFFFF;padding:6px 12px;border-radius:6px;'
+                    f'font-size:13px;font-weight:600;text-decoration:none">'
+                    f'🗺️ Get directions</a>',
+                    unsafe_allow_html=True,
+                )
             if c.get("address"):
                 st.caption(f"Addr: {c['address']}")
         with col_b:

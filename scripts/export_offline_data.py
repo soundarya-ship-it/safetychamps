@@ -29,6 +29,7 @@ HTML_PATH = "static/emergency.html"
 FIELDS = [
     "id", "name", "phone", "phone_alt", "category",
     "tier", "confidence", "lat", "lon", "state", "district",
+    "source",  # needed by emergency.html to gate the directions button
 ]
 
 
